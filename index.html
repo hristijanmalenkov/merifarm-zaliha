@@ -400,8 +400,11 @@ async function loadNaracka(){
       try{ await sql((k===''||+k===0)&&!d?`delete from order_lines where sifra='${sf}'`:`insert into order_lines(sifra,kolicina,dobavuvac,updated_at) values ('${sf}',${k===''?'null':+k},${d?`'${sq(d)}'`:'null'},now()) on conflict (sifra) do update set kolicina=excluded.kolicina,dobavuvac=excluded.dobavuvac,updated_at=now()`); tr.classList.add('saved'); setTimeout(()=>tr.classList.remove('saved'),800); }
       catch(e){ document.getElementById('nrmsg').textContent='Грешка при чување: '+e.message; } },600); }));
   document.getElementById('nrok').onclick=async()=>{ const b=document.getElementById('nrok'); b.disabled=true;
-    try{ const [r]=await sql(`select order_confirm('${NR.do}') id`); document.getElementById('nrmsg').textContent='Нарачката е потврдена.'; location.hash='o'+r.id; }
-    catch(e){ document.getElementById('nrmsg').textContent=e.message||e; b.disabled=false; } };
+    const msg=document.getElementById('nrmsg'); msg.textContent='Потврдувам…';
+    try{ const [cnt]=await sql(`select count(*) n from order_lines where kolicina>0`); if(!+cnt.n){ msg.textContent='Нема внесени количини во „Нарачај“.'; b.disabled=false; return; }
+      const [r]=await sql(`select order_confirm('${NR.do}') id`); if(!r||!r.id) throw new Error('Потврдата не врати број на нарачка');
+      msg.textContent=`Нарачката е потврдена (${cnt.n} артикли).`; setTimeout(()=>{ location.hash='o'+r.id; },300); }
+    catch(e){ msg.innerHTML='<span class="down">Грешка при потврда: '+esc(e.message||e)+' — количините се сочувани, пробај пак.</span>'; b.disabled=false; } };
   document.getElementById('nrpdf').onclick=async()=>{ const ol=await sql(`select o.sifra,a.ime,o.kolicina,coalesce(nullif(trim(o.dobavuvac),''),a.dobavuvac_sw) dob,st.zaliha from order_lines o join articles a on a.sifra=o.sifra left join article_stats st on st.sifra=o.sifra where o.kolicina>0 order by dob nulls last, a.ime`);
     if(!ol.length){ document.getElementById('nrmsg').textContent='Нема внесени количини во „Нарачај“.'; return; }
     makePdf(`Нарачка до ${NR.do.split('-').reverse().join('.')}`, groupedRows(ol,r=>r.dob,r=>[r.sifra,r.ime,fmt1(r.zaliha),fmt(r.kolicina)]), ['Шифра','Артикл','Залиха','Нарачај'], `naracka-${NR.do}.pdf`, document.getElementById('nrmsg')); };
