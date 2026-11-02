@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="mk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<title>Merifarm Залиха</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: sticky top bar with search, one scrolling column, article page as a stacked card set */
+:root{
+  --bg:#f5f6f4; --surface:#ffffff; --fg:#1b1f1c; --muted:#66706a; --line:#dde2de;
+  --accent:#166a5a; --accent-soft:#e2f0ec; --y1:#166a5a; --y2:#7fb3a6; --y3:#c9ddd6;
+  --good:#2e7d32; --warn:#b26a00; --bad:#b3261e; --bad-soft:#fbe9e7;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121514; --surface:#1b1f1d; --fg:#e8ebe8; --muted:#98a39c; --line:#2b312d;
+  --accent:#4fc3a9; --accent-soft:#17302a; --y1:#4fc3a9; --y2:#2f7a68; --y3:#214a40;
+  --good:#66bb6a; --warn:#ffb74d; --bad:#ef5350; --bad-soft:#3a1f1d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121514; --surface:#1b1f1d; --fg:#e8ebe8; --muted:#98a39c; --line:#2b312d;
+  --accent:#4fc3a9; --accent-soft:#17302a; --y1:#4fc3a9; --y2:#2f7a68; --y3:#214a40;
+  --good:#66bb6a; --warn:#ffb74d; --bad:#ef5350; --bad-soft:#3a1f1d; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--sans)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--surface);border-bottom:1px solid var(--line);
+  padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.hwrap{max-width:960px;margin:0 auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.brand{font-weight:600;letter-spacing:.01em;white-space:nowrap}
+.brand small{color:var(--muted);font-weight:400;margin-left:6px}
+nav{display:flex;gap:4px}
+nav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:8px;font-weight:500}
+nav a.on{background:var(--accent-soft);color:var(--accent)}
+input,select,textarea{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:10px;padding:9px 12px;font:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+#q{flex:1 1 220px;min-width:0}
+main{max-width:960px;margin:0 auto;padding-block:18px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:22px;margin:0 0 4px;text-wrap:balance}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:22px 0 10px;font-weight:600}
+.sub{color:var(--muted);margin:0 0 14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.tile .l{font-size:12px;color:var(--muted)}
+.tile .v{font:500 22px/1.2 var(--mono);font-variant-numeric:tabular-nums;margin-top:2px}
+.tile .v small{font:400 12px var(--sans);color:var(--muted);margin-left:4px}
+.tile.bad .v{color:var(--bad)} .tile.warn .v{color:var(--warn)} .tile.good .v{color:var(--good)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-weight:500;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.twrap{overflow-x:auto}
+a.art{color:var(--fg);text-decoration:none;font-weight:500}
+a.art:hover{color:var(--accent)}
+.code{font-family:var(--mono);color:var(--muted);font-size:12px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:500;margin:2px 4px 2px 0}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip .g{opacity:.65;font-weight:400}
+.chip button{appearance:none;border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:0 0 0 2px;line-height:1}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:640px){.row{grid-template-columns:1fr}}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
+.kv b{font-weight:500;color:var(--muted)}
+.kv span{font-family:var(--mono);font-variant-numeric:tabular-nums}
+svg{display:block;width:100%;height:auto;max-width:100%}
+.ax{fill:var(--muted);font:11px var(--mono)}
+.bar{fill:var(--accent)} .b1{fill:var(--y1)} .b2{fill:var(--y2)} .b3{fill:var(--y3)}
+.grid{stroke:var(--line);stroke-width:1}
+.line{fill:none;stroke:var(--accent);stroke-width:1.5}
+.area{fill:var(--accent);opacity:.12}
+.empty{color:var(--muted);padding:24px;text-align:center}
+.err{background:var(--bad-soft);color:var(--bad);padding:12px 14px;border-radius:10px}
+.cover{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:8px}
+.cover div{border:1px solid var(--line);border-radius:10px;padding:8px 10px;text-align:center}
+.cover .l{font-size:11px;color:var(--muted)} .cover .v{font:500 16px var(--mono)}
+.cover .ok{border-color:var(--good)} .cover .low{border-color:var(--bad);background:var(--bad-soft)}
+.back{color:var(--muted);text-decoration:none;font-size:13px}
+.btn{appearance:none;border:0;background:var(--accent);color:#fff;font:500 14px var(--sans);padding:9px 14px;border-radius:10px;cursor:pointer}
+.btn.sec{background:var(--accent-soft);color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.inline input,.inline select{flex:1 1 140px;min-width:0}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin:6px 0 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.up{color:var(--good)} .down{color:var(--bad)}
+.hint{font-size:12px;color:var(--muted);margin-top:6px}
+.c-orange td:first-child{box-shadow:inset 4px 0 0 #e8842a}.c-orange{background:rgba(232,132,42,.10)}
+.c-red td:first-child{box-shadow:inset 4px 0 0 var(--bad)}.c-red{background:rgba(179,38,30,.10)}
+.c-yellow td:first-child{box-shadow:inset 4px 0 0 #d4b106}.c-yellow{background:rgba(212,177,6,.12)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px}.sw.c-orange{background:#e8842a}.sw.c-red{background:var(--bad)}.sw.c-yellow{background:#d4b106}
+.saved td{transition:background .3s;background:var(--accent-soft)!important}
+.ci{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);border-left:5px solid transparent;cursor:pointer}
+.ci.cur{background:var(--accent-soft)}
+.bigq{font:600 26px/1 var(--mono);min-width:72px;text-align:right;color:var(--accent);margin-right:10px}
+.ci.ima{border-left-color:var(--good);background:rgba(46,125,50,.10)}
+.ci.nema{border-left-color:var(--bad);background:rgba(179,38,30,.10)}
+.ci button{appearance:none;border:1px solid var(--line);background:var(--surface);width:44px;height:40px;border-radius:10px;font-size:20px;cursor:pointer}
+.ci button.ok{color:var(--good)} .ci button.no{color:var(--bad)}
+.ci.ima button.ok{background:var(--good);color:#fff} .ci.nema button.no{background:var(--bad);color:#fff}
+.minibox{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;padding:6px 0}
+.minibox table{font-size:12px}
+.plus{display:inline-block;width:18px;height:18px;line-height:17px;text-align:center;border:1px solid var(--line);border-radius:5px;color:var(--accent);text-decoration:none;font-weight:600;margin-left:6px;font-size:13px}
+.plus:hover{background:var(--accent-soft)}
+.minirow td{background:var(--bg)}
+.subgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px}
+.tab{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--muted);font:500 14px var(--sans);padding:8px 14px;border-radius:999px;cursor:pointer}
+.tab.on{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+textarea{width:100%;min-height:72px;resize:vertical}
+.note{white-space:pre-wrap;font-size:14px}
+.bulk{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:10px 0;margin-top:10px}
+@media (prefers-reduced-motion:no-preference){.tile,.card{transition:border-color .15s}}
+#login{max-width:380px;margin:60px auto;padding:0 16px}
+body.auth header,body.auth main{display:none}
+</style>
+</head>
+<body>
+<header><div class="hwrap">
+  <div class="brand">Merifarm<small>залиха</small></div>
+  <input id="q" type="search" placeholder="Пребарај артикл по име или шифра…" autocomplete="off">
+  <nav><a href="#pregled" id="n-pregled">Преглед</a><a href="#artikli" id="n-artikli">Артикли</a><a href="#vlezovi" id="n-vlezovi">Влезови</a><a href="#naracki" id="n-naracki">Нарачки</a><a href="#rokovi" id="n-rokovi">Рокови</a><a href="#brendovi" id="n-brendovi">Брендови</a><a href="#tagovi" id="n-tagovi">Тагови</a></nav><span class="hint" id="who" style="margin-left:auto"></span><button class="btn sec" id="logout" style="padding:6px 10px">Одјава</button>
+</div></header>
+<div id="login" hidden><form id="lform" class="card"><h1>Merifarm Залиха</h1><p class="sub">Најави се за да продолжиш</p>
+  <label class="hint">Е-пошта</label><input id="lemail" type="email" autocomplete="username" required style="width:100%;margin:4px 0 10px">
+  <label class="hint">Лозинка</label><input id="lpass" type="password" autocomplete="current-password" required style="width:100%;margin:4px 0 14px">
+  <div class="inline"><button class="btn" type="submit">Најави се</button><button class="btn sec" type="button" id="lreg">Прв пат? Направи налог</button></div><p id="lmsg" class="hint" style="margin:10px 0 0"></p></form></div>
+<main id="main"><div class="empty">Се поврзувам со базата…</div></main>
+
+<script>
+const SB_URL='https://giqjayevgbmjltzmqodu.supabase.co';
+const SB_KEY='sb_publishable_7RIi-7YALZv1rQJZan-UHw_cGgA0KuX';
+let mcp=null; const main=document.getElementById('main'); const q=document.getElementById('q');
+const fmt=n=>n==null?'—':Number(n).toLocaleString('mk-MK',{maximumFractionDigits:0});
+const fmt1=n=>n==null?'—':Number(n).toLocaleString('mk-MK',{maximumFractionDigits:1});
+const fmt2=n=>n==null?'—':Number(n).toLocaleString('mk-MK',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct2=(a,b)=>{ if(!b) return '—'; const p=(a-b)/b*100; return `<span class="${p>=0?'up':'down'}">${p>=0?'+':''}${fmt1(p)}%</span>`; };
+const pct=(a,b)=>{ if(!b) return '—'; const p=(a-b)/b*100; return `<span class="${p>=0?'up':'down'}">${p>=0?'+':''}${fmt(p)}%</span>`; };
+const esc=s=>s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sq=s=>String(s).replace(/'/g,"''");
+const MES=['јан','фев','мар','апр','мај','јун','јул','авг','сеп','окт','ное','дек'];
+const MESL=['јануари','февруари','март','април','мај','јуни','јули','август','септември','октомври','ноември','декември'];
+
+async function sql(query){
+  const {data,error}=await sb.rpc('app_sql',{q:query});
+  if(error) throw new Error(error.message||JSON.stringify(error));
+  return Array.isArray(data)?data:[];
+}
+function fail(e){ main.innerHTML=`<div class="err">Грешка (${esc(e.code||'')}): ${esc(e.message||e)}</div>`; }
+function toast(el,msg,bad){ el.innerHTML=`<span class="${bad?'down':'up'}">${esc(msg)}</span>`; setTimeout(()=>{el.textContent=''},2500); }
+
+/* ---------- charts ---------- */
+function barChart(items, labelOf, valueOf, h=160){
+  const W=640, pad={l:36,r:8,t:10,b:26}; const n=items.length; if(!n) return '<div class="empty">Нема податоци</div>';
+  const max=Math.max(1,...items.map(valueOf)); const iw=(W-pad.l-pad.r)/n; const bw=Math.max(2,iw*0.7);
+  const y=v=>pad.t+(h-pad.t-pad.b)*(1-v/max);
+  let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
+  [0,.5,1].forEach(f=>{const yy=y(max*f); s+=`<line class="grid" x1="${pad.l}" x2="${W-pad.r}" y1="${yy}" y2="${yy}"/><text class="ax" x="${pad.l-4}" y="${yy+4}" text-anchor="end">${fmt(max*f)}</text>`;});
+  items.forEach((it,i)=>{const v=valueOf(it); const x=pad.l+i*iw+(iw-bw)/2; s+=`<rect class="bar" x="${x}" y="${y(v)}" width="${bw}" height="${Math.max(0,y(0)-y(v))}" rx="2"><title>${esc(labelOf(it))}: ${fmt1(v)}</title></rect>`;
+    const every=Math.ceil(n/12); if(i%every===0) s+=`<text class="ax" x="${x+bw/2}" y="${h-8}" text-anchor="middle">${esc(labelOf(it))}</text>`;});
+  return s+'</svg>';
+}
+function groupChart(groups, series, h=170){ // groups: 12 labels; series: [{cls, vals[12]}]
+  const W=640, pad={l:36,r:8,t:10,b:26}; const n=groups.length;
+  const max=Math.max(1,...series.flatMap(s=>s.vals)); const gw=(W-pad.l-pad.r)/n; const bw=Math.max(2,(gw*0.78)/series.length);
+  const y=v=>pad.t+(h-pad.t-pad.b)*(1-v/max);
+  let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
+  [0,.5,1].forEach(f=>{const yy=y(max*f); s+=`<line class="grid" x1="${pad.l}" x2="${W-pad.r}" y1="${yy}" y2="${yy}"/><text class="ax" x="${pad.l-4}" y="${yy+4}" text-anchor="end">${fmt(max*f)}</text>`;});
+  groups.forEach((g,i)=>{ series.forEach((sr,k)=>{ const v=sr.vals[i]||0; const x=pad.l+i*gw+gw*0.11+k*bw; s+=`<rect class="${sr.cls}" x="${x}" y="${y(v)}" width="${bw-1}" height="${Math.max(0,y(0)-y(v))}" rx="1.5"><title>${esc(g)} ${sr.name}: ${fmt1(v)}</title></rect>`; });
+    s+=`<text class="ax" x="${pad.l+i*gw+gw/2}" y="${h-8}" text-anchor="middle">${esc(g)}</text>`; });
+  return s+'</svg>';
+}
+function lineChart(items, labelOf, valueOf, h=150){
+  const W=640, pad={l:36,r:8,t:10,b:26}; const n=items.length; if(n<2) return '<div class="empty">Нема податоци</div>';
+  const max=Math.max(1,...items.map(valueOf)); const x=i=>pad.l+(W-pad.l-pad.r)*i/(n-1); const y=v=>pad.t+(h-pad.t-pad.b)*(1-v/max);
+  const pts=items.map((it,i)=>`${x(i)},${y(valueOf(it))}`).join(' ');
+  let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
+  [0,.5,1].forEach(f=>{const yy=y(max*f); s+=`<line class="grid" x1="${pad.l}" x2="${W-pad.r}" y1="${yy}" y2="${yy}"/><text class="ax" x="${pad.l-4}" y="${yy+4}" text-anchor="end">${fmt(max*f)}</text>`;});
+  s+=`<polygon class="area" points="${x(0)},${y(0)} ${pts} ${x(n-1)},${y(0)}"/><polyline class="line" points="${pts}"/>`;
+  const every=Math.ceil(n/8); items.forEach((it,i)=>{ if(i%every===0||i===n-1) s+=`<text class="ax" x="${x(i)}" y="${h-8}" text-anchor="middle">${esc(labelOf(it))}</text>`; });
+  const last=items[n-1]; s+=`<circle cx="${x(n-1)}" cy="${y(valueOf(last))}" r="3" class="bar"/>`;
+  return s+'</svg>';
+}
+function yoyTable(rows){ // rows: {y,m,kol}
+  const years=[...new Set(rows.map(r=>+r.y))].sort(); const by={}; rows.forEach(r=>{by[r.y+'-'+r.m]=+r.kol;});
+  const tot={}; years.forEach(y=>tot[y]=0);
+  let h=`<table><tr><th>Месец</th>${years.map(y=>`<th class="n">${y}</th>`).join('')}<th class="n">${years.at(-1)} vs ${years.at(-2)??''}</th></tr>`;
+  for(let m=1;m<=12;m++){
+    const v=years.map(y=>by[y+'-'+m]); years.forEach((y,i)=>tot[y]+=v[i]||0);
+    const a=v.at(-1), b=v.at(-2);
+    h+=`<tr><td>${MES[m-1]}</td>${v.map(x=>`<td class="n">${x==null?'·':fmt1(x)}</td>`).join('')}<td class="n">${a!=null&&b!=null?pct(a,b):'—'}</td></tr>`;
+  }
+  h+=`<tr><td><b>Вкупно</b></td>${years.map(y=>`<td class="n"><b>${fmt(tot[y])}</b></td>`).join('')}<td></td></tr></table>`;
+  const series=years.slice(-3).map((y,i,arr)=>({name:String(y),cls:'b'+(arr.length-i),vals:Array.from({length:12},(_,m)=>by[y+'-'+(m+1)]||0)}));
+  const legend=`<div class="legend">${series.map(s=>`<span><i class="${s.cls}" style="background:var(--${s.cls==='b1'?'y1':s.cls==='b2'?'y2':'y3'})"></i>${s.name}</span>`).join('')}</div>`;
+  return {table:h, chart:groupChart(MES,series)+legend};
+}
+
+/* ---------- tags helpers ---------- */
+let TAGS=null;
+async function loadTags(force){ if(TAGS&&!force) return TAGS; TAGS=await sql(`select t.id,t.ime,g.id gid,g.ime grupa from tags t join tag_groups g on g.id=t.group_id order by g.redosled,g.ime,t.ime`); return TAGS; }
+function tagPicker(id){
+  const groups=[...new Map(TAGS.map(t=>[t.gid,t.grupa])).entries()];
+  return `<div class="inline" id="${id}">
+    <select class="tg"><option value="">— група —</option>${groups.map(([gid,g])=>`<option value="${gid}">${esc(g)}</option>`).join('')}<option value="__new">+ нова група…</option></select>
+    <input class="tgnew" placeholder="Име на нова група" hidden>
+    <input class="tn" list="dl-${id}" placeholder="Таг (постоечки или нов)"><datalist id="dl-${id}"></datalist>
+    <button class="btn add">Додај</button><span class="msg"></span></div>`;
+}
+function wirePicker(el, onAdd){
+  const sel=el.querySelector('.tg'), nw=el.querySelector('.tgnew'), tn=el.querySelector('.tn'), dl=el.querySelector('datalist');
+  const fill=()=>{ const gid=sel.value; dl.innerHTML=TAGS.filter(t=>!gid||gid==='__new'||String(t.gid)===gid).map(t=>`<option value="${esc(t.ime)}">${esc(t.grupa)}</option>`).join(''); };
+  sel.onchange=()=>{ nw.hidden=sel.value!=='__new'; fill(); }; fill();
+  const go=async()=>{ const name=tn.value.trim(); if(!name) return; let gid=sel.value; let gname=null;
+    if(gid==='__new'){ gname=nw.value.trim(); if(!gname){ toast(el.querySelector('.msg'),'Внеси име на групата',true); return; } }
+    if(!gid){ const ex=TAGS.find(t=>t.ime.toLowerCase()===name.toLowerCase()); if(ex) gid=String(ex.gid); else { toast(el.querySelector('.msg'),'Избери група',true); return; } }
+    el.querySelector('.add').disabled=true;
+    try{ await onAdd(gid,gname,name); tn.value=''; }catch(e){ toast(el.querySelector('.msg'),e.message||e,true); }
+    el.querySelector('.add').disabled=false; };
+  el.querySelector('.add').onclick=go; tn.onkeydown=e=>{ if(e.key==='Enter') go(); };
+}
+async function ensureTag(gid,gname,name){
+  const [t]=await sql(`select tag_ensure(${gname?'null':+gid}, ${gname?`'${sq(gname)}'`:'null'}, '${sq(name)}') id`);
+  return t.id;
+}
+
+/* ---------- views ---------- */
+let TAB='godini';
+function yearChart(years, target){ // years: [{y,v,ytd:boolean}], target: {y,v} or null
+  const W=640,h=220,pad={l:60,r:16,t:16,b:30}; const n=years.length;
+  const max=Math.max(1,...years.map(x=>x.v), target?target.v:0)*1.08;
+  const gw=(W-pad.l-pad.r)/n, bw=gw*0.52; const y=v=>pad.t+(h-pad.t-pad.b)*(1-v/max);
+  let s=`<svg viewBox="0 0 ${W} ${h}" role="img">`;
+  [0,.25,.5,.75,1].forEach(f=>{const yy=y(max*f/1.08); s+=`<line class="grid" x1="${pad.l}" x2="${W-pad.r}" y1="${yy}" y2="${yy}"/><text class="ax" x="${pad.l-6}" y="${yy+4}" text-anchor="end">${fmt(max*f/1.08/1e6)} M</text>`;});
+  years.forEach((x,i)=>{ const cx=pad.l+i*gw+gw/2; const x0=cx-bw/2;
+    s+=`<rect class="${x.ytd?'b1':'b2'}" x="${x0}" y="${y(x.v)}" width="${bw}" height="${Math.max(0,y(0)-y(x.v))}" rx="3"><title>${x.y}: ${fmt(x.v)}</title></rect>`;
+    s+=`<text class="ax" x="${cx}" y="${y(x.v)-6}" text-anchor="middle" style="font-weight:500">${fmt(x.v/1e6)} M</text>`;
+    s+=`<text class="ax" x="${cx}" y="${h-10}" text-anchor="middle">${x.y}${x.ytd?' (до сега)':''}</text>`;
+    if(target&&target.y===x.y){ const ty=y(target.v); s+=`<line x1="${x0-10}" x2="${x0+bw+10}" y1="${ty}" y2="${ty}" stroke="var(--warn)" stroke-width="2" stroke-dasharray="6 3"/><text class="ax" x="${x0+bw+12}" y="${ty+4}" style="fill:var(--warn);font-weight:500">таргет ${fmt(target.v/1e6)} M</text>`; }
+  });
+  return s+'</svg>';
+}
+async function viewPregled(){
+  main.innerHTML='<div class="empty">Вчитувам преглед…</div>';
+  const [cfg]=await sql(`select coalesce((select value from app_settings where key='target_rast_pct'),'20')::numeric pct, (select max(datum) from daily_turnover) last, (select count(*) from daily_turnover) n`);
+  if(!+cfg.n){ main.innerHTML='<h1>Преглед</h1><div class="empty">Нема увезен дневен промет — увези го од страницата „Увоз во базата“.</div>'; return; }
+  const last=cfg.last; const Y=+last.slice(0,4); const pct=+cfg.pct;
+  const [years,ytd,mon,days]=await Promise.all([sql(`select extract(year from datum)::int y, sum(vrednost) v, min(datum) od, max(datum) do_ from daily_turnover group by 1 order by 1`),sql(`select extract(year from datum)::int y, sum(vrednost) v, count(*) dena from daily_turnover where to_char(datum,'MM-DD') <= '${last.slice(5)}' group by 1 order by 1`),sql(`select extract(year from datum)::int y, extract(month from datum)::int m, sum(vrednost) v from daily_turnover group by 1,2 order by 1,2`),sql(`select datum, vrednost v, smetki from daily_turnover where datum > '${last}'::date-60 order by 1`)]);
+  const [cmp]=await sql(`select
+    (select sum(vrednost) from daily_turnover where datum > '${last}'::date-30 and datum <= '${last}') t30,
+    (select sum(vrednost) from daily_turnover where datum > ('${last}'::date-30)-interval '1 year' and datum <= '${last}'::date-interval '1 year') l30,
+    (select sum(vrednost) from daily_turnover where datum >= date_trunc('month','${last}'::date) and datum <= '${last}') tm,
+    (select sum(vrednost) from daily_turnover where datum >= date_trunc('month','${last}'::date)-interval '1 year' and datum <= '${last}'::date-interval '1 year') lm,
+    (select sum(vrednost) from daily_turnover where datum > '${last}'::date-7 and datum <= '${last}') t7,
+    (select sum(vrednost) from daily_turnover where datum > ('${last}'::date-7)-interval '1 year' and datum <= '${last}'::date-interval '1 year') l7`);
+  const cur=years.find(x=>x.y===Y), prev=years.find(x=>x.y===Y-1), prev2=years.find(x=>x.y===Y-2);
+  const curYtd=ytd.find(x=>x.y===Y), prevYtd=ytd.find(x=>x.y===Y-1);
+  const target=prev?+prev.v*(1+pct/100):null;
+  const endOfYear=new Date(Y,11,31); const lastD=new Date(last); const daysLeft=Math.round((endOfYear-lastD)/86400000);
+  const curV=+cur.v; const reached=target&&curV>=target;
+  const perDay=target&&!reached&&daysLeft>0?(target-curV)/daysLeft:null;
+  const avgDay=curV/(+curYtd.dena);
+  const yc=yearChart(years.map(x=>({y:x.y,v:+x.v,ytd:x.y===Y})), target?{y:Y,v:target}:null);
+  // monthly
+  const by={}; mon.forEach(r=>by[r.y+'-'+r.m]=+r.v); const ys=[...new Set(mon.map(r=>+r.y))].sort();
+  const series=ys.slice(-3).map((y,i,arr)=>({name:String(y),cls:'b'+(arr.length-i),vals:Array.from({length:12},(_,m)=>by[y+'-'+(m+1)]||0)}));
+  let mt=`<table><tr><th>Месец</th>${ys.map(y=>`<th class="n">${y}</th>`).join('')}<th class="n">${ys.at(-1)} vs ${ys.at(-2)}</th></tr>`;
+  for(let m=1;m<=12;m++){ const v=ys.map(y=>by[y+'-'+m]); mt+=`<tr><td>${MESL[m-1]}</td>${v.map(x=>`<td class="n">${x==null?'·':fmt(x)}</td>`).join('')}<td class="n">${v.at(-1)!=null&&v.at(-2)!=null?pct2(v.at(-1),v.at(-2)):'—'}</td></tr>`; }
+  mt+='</table>';
+  const tabs=[['godini','Години'],['meseci','Месеци'],['dnevno','Дневно'],['naracka','Нарачка']];
+  main.innerHTML=`<h1>Преглед</h1><p class="sub">Промет со ДДВ · податоци до ${esc(last)}</p>
+    <div class="tabs">${tabs.map(([k,l])=>`<button class="tab${TAB===k?' on':''}" data-tab="${k}">${l}</button>`).join('')}</div>
+    <div id="tab-godini" ${TAB!=='godini'?'hidden':''}>
+      <div class="tiles">
+        <div class="tile"><div class="l">${Y} до ${esc(last)}</div><div class="v">${fmt(curV)}<small>ден.</small></div><div class="hint">${prevYtd?'ист период '+(Y-1)+': '+fmt(prevYtd.v)+' · '+pct2(curV,+prevYtd.v):''}</div></div>
+        <div class="tile"><div class="l">Таргет ${Y} (+${pct}% на ${Y-1})</div><div class="v">${target?fmt(target):'—'}<small>ден.</small></div><div class="hint">${Y-1}: ${prev?fmt(prev.v):'—'}</div></div>
+        ${reached
+          ?`<div class="tile good"><div class="l">Таргетот е надминат · раст спрема ${Y-1}</div><div class="v">${pct2(curV,+prev.v)}</div><div class="hint">над таргетот за ${fmt(curV-target)} ден.</div></div>`
+          :`<div class="tile${curYtd&&prevYtd&&curV/+prevYtd.v>=1+pct/100?' good':' warn'}"><div class="l">Исполнето од таргетот</div><div class="v">${target?fmt1(curV/target*100):'—'}<small>%</small></div><div class="hint">недостигаат ${target?fmt(target-curV):'—'} ден.</div></div>`}
+        <div class="tile"><div class="l">Просечен дневен промет ${Y}</div><div class="v">${fmt(avgDay)}<small>ден./ден</small></div><div class="hint">${curYtd.dena} работни дена</div></div>
+      </div>
+      <div class="card" style="margin-top:12px">${yc}
+        <div class="twrap" style="margin-top:10px"><table><tr><th>Година</th><th class="n">Промет</th><th class="n">Раст</th><th class="n">Дена</th><th class="n">Просек/ден</th></tr>
+        ${years.map((x,i)=>`<tr><td>${x.y}${x.y===Y?' (до '+esc(last)+')':''}</td><td class="n">${fmt(x.v)}</td><td class="n">${i?pct2(+x.v,+years[i-1].v):'—'}</td><td class="n">${(ytd.find(z=>z.y===x.y)||{}).dena||'—'}</td><td class="n">${fmt(+x.v/((ytd.find(z=>z.y===x.y)||{dena:1}).dena))}</td></tr>`).join('')}</table></div>
+        <p class="hint" style="margin-top:4px">Растот за ${Y} во табелата е спрема целата ${Y-1}; споредбата за ист период е во првата плочка.</p>
+      </div>
+      <h2>Раст спрема истиот период лани</h2>
+      <div class="tiles">
+        <div class="tile"><div class="l">Од почеток на годината (1.1 – ${esc(last.slice(8))}.${esc(last.slice(5,7))})</div><div class="v">${prevYtd?pct2(curV,+prevYtd.v):'—'}</div><div class="hint">${fmt(curV)} vs ${prevYtd?fmt(prevYtd.v):'—'} ден.</div></div>
+        <div class="tile"><div class="l">Овој месец (${MESL[+last.slice(5,7)-1]}, до ${esc(last.slice(8))}.)</div><div class="v">${pct2(+cmp.tm,+cmp.lm)}</div><div class="hint">${fmt(cmp.tm)} vs ${fmt(cmp.lm)} ден.</div></div>
+        <div class="tile"><div class="l">Последни 30 дена</div><div class="v">${pct2(+cmp.t30,+cmp.l30)}</div><div class="hint">${fmt(cmp.t30)} vs ${fmt(cmp.l30)} ден.</div></div>
+        <div class="tile"><div class="l">Последни 7 дена</div><div class="v">${pct2(+cmp.t7,+cmp.l7)}</div><div class="hint">${fmt(cmp.t7)} vs ${fmt(cmp.l7)} ден.</div></div>
+      </div>
+      ${target&&!reached?`<div class="card" style="margin-top:12px;border-color:var(--warn)"><b>До таргетот:</b> уште <b>${fmt(perDay)} ден./ден</b> во просек, секој од преостанатите <b>${daysLeft}</b> дена до 31.12.${Y} (сега просекот е ${fmt(avgDay)} ден./ден, т.е. ${perDay>avgDay?'<span class="down">+'+fmt((perDay/avgDay-1)*100)+'% повеќе</span>':'<span class="up">веќе е доволно</span>'}).</div>`:''}
+      <div class="inline" style="margin-top:12px"><span class="hint">Таргет: раст од</span><input id="tpct" type="number" style="width:80px" value="${pct}"><span class="hint">% спрема претходната година</span><button class="btn sec" id="tsave">Зачувај</button><span id="tmsg"></span></div>
+    </div>
+    <div id="tab-meseci" ${TAB!=='meseci'?'hidden':''}><div class="card">${groupChart(MES,series)}<div class="legend">${series.map(s=>`<span><i style="background:var(--${s.cls==='b1'?'y1':s.cls==='b2'?'y2':'y3'})"></i>${s.name}</span>`).join('')}</div><div class="twrap" style="margin-top:10px">${mt}</div></div></div>
+    <div id="tab-dnevno" ${TAB!=='dnevno'?'hidden':''}><div id="dnevno-box"><div class="empty">Вчитувам…</div></div></div>
+    <div id="tab-naracka" ${TAB!=='naracka'?'hidden':''}><div id="naracka-box"><div class="empty">Вчитувам…</div></div></div>`;
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ TAB=b.dataset.tab; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b)); tabs.forEach(([k])=>document.getElementById('tab-'+k).hidden=k!==TAB); if(TAB==='naracka') loadNaracka(); if(TAB==='dnevno') loadDnevno(); });
+  document.getElementById('tsave').onclick=async()=>{ const v=+document.getElementById('tpct').value; try{ await sql(`insert into app_settings values ('target_rast_pct','${v}') on conflict (key) do update set value=excluded.value`); toast(document.getElementById('tmsg'),'Зачувано'); viewPregled(); }catch(e){ toast(document.getElementById('tmsg'),e.message,true); } };
+  if(TAB==='naracka') loadNaracka();
+  if(TAB==='dnevno') loadDnevno();
+}
+/* ---- Дневно: ист датум низ годините ---- */
+let DM=null;
+async function loadDnevno(){
+  const box=document.getElementById('dnevno-box'); if(!box) return;
+  const [cfg]=await sql(`select max(datum) last from daily_turnover`); const last=cfg.last; const Y=+last.slice(0,4);
+  if(DM==null) DM=+last.slice(5,7);
+  const rows=await sql(`select extract(year from datum)::int y, extract(day from datum)::int d, vrednost v, smetki from daily_turnover where extract(month from datum)=${DM} and extract(year from datum)>=${Y-2} order by 1,2`);
+  const by={}; rows.forEach(r=>by[r.y+'-'+r.d]={v:+r.v,s:r.smetki});
+  const dim=new Date(Y,DM,0).getDate(); const tot={}; [Y-2,Y-1,Y].forEach(y=>tot[y]=0);
+  let tr=''; for(let d=1;d<=dim;d++){ const a=by[Y+'-'+d], b=by[(Y-1)+'-'+d], c=by[(Y-2)+'-'+d]; if(a) tot[Y]+=a.v; if(b) tot[Y-1]+=b.v; if(c) tot[Y-2]+=c.v;
+    const dt=new Date(Y,DM-1,d); const wd=['нед','пон','вто','сре','чет','пет','саб'][dt.getDay()];
+    tr+=`<tr${!a?' style="color:var(--muted)"':''}><td>${String(d).padStart(2,'0')}.${String(DM).padStart(2,'0')}. <span class="hint">${wd}</span></td><td class="n">${a?fmt(a.v):'·'}</td><td class="n">${b?fmt(b.v):'·'}</td><td class="n">${c?fmt(c.v):'·'}</td><td class="n">${a&&b?pct2(a.v,b.v):'—'}</td><td class="n">${a?fmt(a.s):'·'}</td></tr>`; }
+  const ytdA=Object.keys(by).filter(k=>k.startsWith(Y+'-')).length;
+  const sameB=Object.entries(by).filter(([k])=>k.startsWith((Y-1)+'-') && +k.split('-')[1]<=ytdA).reduce((s,[,x])=>s+x.v,0);
+  box.innerHTML=`<div class="inline" style="margin-bottom:10px"><span class="hint">Месец:</span><select id="dmsel">${MESL.map((m,i)=>`<option value="${i+1}"${DM===i+1?' selected':''}>${m}</option>`).join('')}</select>
+      <span class="hint">${MESL[DM-1]} ${Y} до сега: <b>${fmt(tot[Y])}</b> · истите денови ${Y-1}: <b>${fmt(sameB)}</b> · ${pct2(tot[Y],sameB)}</span></div>
+    <div class="card twrap"><table><tr><th>Ден</th><th class="n">${Y}</th><th class="n">${Y-1}</th><th class="n">${Y-2}</th><th class="n">${Y} vs ${Y-1}</th><th class="n">Сметки ${Y}</th></tr>${tr}
+      <tr><td><b>Вкупно</b></td><td class="n"><b>${fmt(tot[Y])}</b></td><td class="n"><b>${fmt(tot[Y-1])}</b></td><td class="n"><b>${fmt(tot[Y-2])}</b></td><td class="n">${pct2(tot[Y],tot[Y-1])}</td><td></td></tr></table></div>
+    <p class="hint">Споредбата е по ист датум (не по ист ден во неделата). Сивите редови се денови што уште не се стигнати.</p>`;
+  document.getElementById('dmsel').onchange=e=>{ DM=+e.target.value; loadDnevno(); };
+}
+/* ---- Нарачка ---- */
+let NR={do:null,od:null,page:0};
+const NPAGE=300;
+async function loadNaracka(){
+  const box=document.getElementById('naracka-box'); if(!box) return;
+  box.innerHTML='<div class="empty">Пресметувам предлог за нарачка…</div>';
+  const [cfg]=await sql(`select max(datum) last from sales_daily`); const last=cfg.last;
+  if(!NR.do){ const d=new Date(last); d.setDate(d.getDate()+30); NR.do=d.toISOString().slice(0,10); }
+  if(!NR.od){ const d=new Date(last); d.setDate(d.getDate()-30); NR.od=d.toISOString().slice(0,10); }
+  const days=Math.max(1,Math.round((new Date(NR.do)-new Date(last))/86400000));
+  const [dobs,[cnt],rows]=await Promise.all([
+    sql(`select d from (select dobavuvac_sw d from articles where dobavuvac_sw is not null union select dobavuvac from order_lines where dobavuvac is not null union select ime from suppliers) x group by 1 order by 1`),
+    sql(`select count(*) n from articles where aktiven and ime not like '%(неактивен)'`),
+    sql(`with r as (select a.sifra,a.ime,a.dobavuvac_sw dob,coalesce(st.zaliha,0) zaliha,st.prod_30,st.prod_90,st.prod_365,st.posledna_prodazba,c.cena_bez_ddv,
+        coalesce((select sum(kolicina) from sales_daily s where s.sifra=a.sifra and s.datum>='${NR.od}'),0) period,
+        case when coalesce(st.prod_90,0)>0 then st.prod_90/90.0 when coalesce(st.prod_365,0)>0 then st.prod_365/365.0 else 0 end rate,
+        ol.kolicina moja, ol.dobavuvac moj_dob
+      from articles a join article_stats st on st.sifra=a.sifra left join article_cost c on c.sifra=a.sifra left join order_lines ol on ol.sifra=a.sifra
+      where a.aktiven and a.ime not like '%(неактивен)' order by a.ime limit ${NPAGE} offset ${NR.page*NPAGE})
+      select *, ceil(greatest(0, rate*${days} - zaliha)) predlog from r`)]);
+  const cls=r=>{ const z=+r.zaliha, per=+r.period, rate=+r.rate, need=rate*days;
+    if(per>z) return 'c-orange'; if(rate>0 && z<rate*30) return 'c-red'; if(need>z && z>per) return 'c-yellow'; return ''; };
+  const pages=Math.ceil(cnt.n/NPAGE);
+  box.innerHTML=`<div class="card" style="margin-bottom:12px"><div class="inline">
+      <span class="hint">Продажба од:</span><input type="date" id="nrod" value="${NR.od}"><span class="hint">до ${esc(last)}</span>
+      <span class="hint" style="margin-left:10px">Роба до датум:</span><input type="date" id="nrdo" value="${NR.do}"><span class="hint">(${days} дена)</span>
+      <button class="btn" id="nrgo">Пресметај</button><button class="btn sec" id="nrpdf">PDF на нарачката</button><button class="btn" id="nrok" style="background:var(--good)">Потврди нарачка</button><span id="nrmsg" class="hint"></span></div>
+    <div class="inline hint" style="margin-top:8px;gap:14px"><span><i class="sw c-orange"></i> продажба во периодот поголема од залихата</span><span><i class="sw c-red"></i> залиха под 30 дена</span><span><i class="sw c-yellow"></i> треба нарачка до датумот, но залихата е над продажбата во периодот</span><span>Предлог = дневно (90 д.) × ${days} − залиха. Во „Нарачај“ стои 0 — се нарачува само она каде ќе внесеш количина. Се чува автоматски.</span></div></div>
+    <div class="inline" style="margin-bottom:8px"><span class="hint">${fmt(cnt.n)} артикли по азбучен ред · страница ${NR.page+1}/${pages}</span>${NR.page>0?'<button class="btn sec" id="nprev">←</button>':''}${NR.page<pages-1?'<button class="btn sec" id="nnext">→</button>':''}<input id="njump" placeholder="скок на буква/име" style="width:170px"></div>
+    <datalist id="dobl">${dobs.map(d=>`<option value="${esc(d.d)}">`).join('')}</datalist>
+    <div class="card twrap" id="nrtable"><table><tr><th>Артикл</th><th class="n">Продажба<br><span class="hint">${NR.od.slice(8)}.${NR.od.slice(5,7)}–${last.slice(8)}.${last.slice(5,7)}</span></th><th class="n">Залиха</th><th class="n">Предлог</th><th class="n">Нарачај</th><th>Добавувач</th></tr>
+      ${rows.map(r=>`<tr class="nr ${cls(r)}" data-s="${r.sifra}"><td><a class="art mini" href="#" data-mini="${r.sifra}">${esc(r.ime)}</a> <a class="plus" href="#a${r.sifra}" title="Отвори картичка">+</a><div class="code">${r.sifra}${r.dob?' · '+esc(r.dob):''}</div></td><td class="n">${fmt1(r.period)}</td><td class="n">${fmt1(r.zaliha)}</td><td class="n"><b>${fmt(r.predlog)}</b></td><td class="n"><input type="number" min="0" class="ol-k" value="${r.moja??0}" style="width:80px"></td><td><input class="ol-d" list="dobl" value="${esc(r.moj_dob??'')}" placeholder="${esc(r.dob||'')}" style="width:170px"></td></tr>`).join('')}
+    </table></div>`;
+  document.getElementById('nrgo').onclick=()=>{ NR.do=document.getElementById('nrdo').value; NR.od=document.getElementById('nrod').value; NR.page=0; loadNaracka(); };
+  const pv=document.getElementById('nprev'), nx=document.getElementById('nnext'); if(pv) pv.onclick=()=>{NR.page--; loadNaracka();}; if(nx) nx.onclick=()=>{NR.page++; loadNaracka();};
+  document.getElementById('njump').onkeydown=async e=>{ if(e.key!=='Enter') return; const q=e.target.value.trim(); if(!q) return;
+    const [x]=await sql(`select count(*) n from articles where aktiven and ime not like '%(неактивен)' and ime < '${sq(q)}'`); NR.page=Math.floor(+x.n/NPAGE); loadNaracka(); };
+  wireMini(box);
+  let tmr={};
+  // тастатура: Enter кол. → добавувач; Enter добавувач → следен ред; ↓/↑ ред; празно поле при напуштање = прифатен предлог
+  const accept=tr=>{ const k=tr.querySelector('.ol-k'), d=tr.querySelector('.ol-d'); let ch=false;
+    if(d.value===''&&d.placeholder){ d.value=d.placeholder; ch=true; }
+    if(ch) k.dispatchEvent(new Event('input')); };
+  const rowsEl=[...box.querySelectorAll('tr.nr')];
+  const go=(tr,dir,col)=>{ const i=rowsEl.indexOf(tr); const t=rowsEl[i+dir]; if(!t) return; const inp=t.querySelector(col); inp.focus(); inp.select&&inp.select(); t.scrollIntoView({block:'center'}); };
+  box.querySelectorAll('.ol-k,.ol-d').forEach(inp=>inp.addEventListener('keydown',ev=>{ const tr=inp.closest('tr');
+    if(ev.key==='Enter'){ ev.preventDefault(); if(inp.classList.contains('ol-k')){ accept(tr); tr.querySelector('.ol-d').focus(); } else { accept(tr); go(tr,1,'.ol-k'); } }
+    else if(ev.key==='ArrowDown'){ ev.preventDefault(); accept(tr); go(tr,1,inp.classList.contains('ol-k')?'.ol-k':'.ol-d'); }
+    else if(ev.key==='ArrowUp'){ ev.preventDefault(); go(tr,-1,inp.classList.contains('ol-k')?'.ol-k':'.ol-d'); } }));
+  box.querySelectorAll('.ol-k,.ol-d').forEach(inp=>inp.addEventListener('input',()=>{ const tr=inp.closest('tr'); const sf=tr.dataset.s; clearTimeout(tmr[sf]);
+    tmr[sf]=setTimeout(async()=>{ const k=tr.querySelector('.ol-k').value, d=tr.querySelector('.ol-d').value.trim();
+      try{ await sql((k===''||+k===0)&&!d?`delete from order_lines where sifra='${sf}'`:`insert into order_lines(sifra,kolicina,dobavuvac,updated_at) values ('${sf}',${k===''?'null':+k},${d?`'${sq(d)}'`:'null'},now()) on conflict (sifra) do update set kolicina=excluded.kolicina,dobavuvac=excluded.dobavuvac,updated_at=now()`); tr.classList.add('saved'); setTimeout(()=>tr.classList.remove('saved'),800); }
+      catch(e){ document.getElementById('nrmsg').textContent='Грешка при чување: '+e.message; } },600); }));
+  document.getElementById('nrok').onclick=async()=>{ const b=document.getElementById('nrok'); b.disabled=true;
+    try{ const [r]=await sql(`select order_confirm('${NR.do}') id`); document.getElementById('nrmsg').textContent='Нарачката е потврдена.'; location.hash='o'+r.id; }
+    catch(e){ document.getElementById('nrmsg').textContent=e.message||e; b.disabled=false; } };
+  document.getElementById('nrpdf').onclick=async()=>{ const ol=await sql(`select o.sifra,a.ime,o.kolicina,coalesce(nullif(trim(o.dobavuvac),''),a.dobavuvac_sw) dob,st.zaliha from order_lines o join articles a on a.sifra=o.sifra left join article_stats st on st.sifra=o.sifra where o.kolicina>0 order by dob nulls last, a.ime`);
+    if(!ol.length){ document.getElementById('nrmsg').textContent='Нема внесени количини во „Нарачај“.'; return; }
+    makePdf(`Нарачка до ${NR.do.split('-').reverse().join('.')}`, groupedRows(ol,r=>r.dob,r=>[r.sifra,r.ime,fmt1(r.zaliha),fmt(r.kolicina)]), ['Шифра','Артикл','Залиха','Нарачај'], `naracka-${NR.do}.pdf`, document.getElementById('nrmsg')); };
+}
+/* ---- мини прозорче: картон (плочки + линија + година×месец) ---- */
+const MINI={};
+function sparkline(vals,h=56){ const W=640,n=vals.length; if(n<2) return ''; const max=Math.max(1,...vals); const x=i=>8+(W-16)*i/(n-1), y=v=>6+(h-14)*(1-v/max);
+  const pts=vals.map((v,i)=>`${x(i)},${y(v)}`).join(' '); return `<svg viewBox="0 0 ${W} ${h}" style="height:${h}px"><polygon class="area" points="${x(0)},${y(0)} ${pts} ${x(n-1)},${y(0)}"/><polyline class="line" points="${pts}"/></svg>`; }
+function kartonHtml(sf,d){
+  const years=[...new Set(d.mon.map(r=>+r.y))].sort(); const by={}; d.mon.forEach(r=>by[r.y+'-'+r.m]=+r.kol);
+  const curY=years.at(-1); const colors={0:'var(--bad)',1:'var(--accent)',2:'var(--good)'};
+  const rows=years.map((y,i)=>{ const tot=Array.from({length:12},(_,m)=>by[y+'-'+(m+1)]||0).reduce((a,b)=>a+b,0);
+    return `<tr><td style="color:${colors[years.length-1-i]||'var(--muted)'};font-weight:600">${y}</td>${Array.from({length:12},(_,m)=>{const v=by[y+'-'+(m+1)]; return `<td class="n">${v==null?'·':fmt1(v)}</td>`;}).join('')}<td class="n"><b>${fmt(tot)}</b></td></tr>`; }).join('');
+  const seq=[]; years.forEach(y=>{ for(let m=1;m<=12;m++){ if(y===curY && m>+d.last.slice(5,7)) break; seq.push(by[y+'-'+m]||0);} });
+  const rate=(+d.prod_90)/90; const traeDo=rate>0&&+d.zaliha>0?new Date(new Date(d.last).getTime()+(+d.zaliha/rate)*86400000).toLocaleDateString('mk-MK'):'—';
+  return `<div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+      <div class="tile"><div class="l">Дневно (90 д.)</div><div class="v" style="font-size:16px">${fmt1(rate)}</div></div>
+      <div class="tile"><div class="l">Трае до</div><div class="v" style="font-size:16px">${traeDo}</div></div>
+      <div class="tile"><div class="l">Прв излез</div><div class="v" style="font-size:16px">${d.prv?d.prv.split('-').reverse().join('.'):'—'}</div></div>
+      <div class="tile"><div class="l">Последен излез</div><div class="v" style="font-size:16px">${d.posl?d.posl.split('-').reverse().join('.'):'—'}</div></div>
+      <div class="tile"><div class="l">Вредност на залиха</div><div class="v" style="font-size:16px">${fmt(+d.zaliha*(+d.cena||0))}<small>ден</small></div></div></div>
+    ${sparkline(seq)}
+    <div class="twrap"><table style="font-size:12px"><tr><th>Год.</th>${MES.map(m=>`<th class="n">${m.toUpperCase()}</th>`).join('')}<th class="n">ВКУПНО</th></tr>${rows}</table></div>`;
+}
+function wireMini(root){
+  root.querySelectorAll('[data-mini]').forEach(a=>a.onclick=async e=>{ e.preventDefault(); const s=a.dataset.mini; const tr=a.closest('tr'); const next=tr.nextElementSibling;
+    if(next&&next.classList.contains('minirow')){ next.remove(); return; }
+    const row=document.createElement('tr'); row.className='minirow'; row.innerHTML=`<td colspan="${tr.children.length}"><div class="empty">Вчитувам…</div></td>`; tr.after(row);
+    if(!MINI[s]){ const [mon,[st]]=await Promise.all([sql(`select extract(year from datum)::int y, extract(month from datum)::int m, sum(kolicina) kol from sales_daily where sifra='${s}' group by 1,2 order by 1,2`),
+        sql(`select st.zaliha,st.prod_90,st.posledna_prodazba posl,st.prv_izlez prv,a.cena,(select max(datum) from sales_daily) last from article_stats st join articles a on a.sifra=st.sifra where st.sifra='${s}'`)]);
+      MINI[s]={mon,...st}; }
+    row.firstElementChild.innerHTML=`<div class="minibox" style="display:block">${kartonHtml(s,MINI[s])}</div>`; });
+}
+function groupedRows(list, keyOf, rowOf){ const out=[]; let last=null; list.forEach(r=>{ const k=keyOf(r)||'(без добавувач)'; if(k!==last){ out.push({h:k}); last=k; } out.push(rowOf(r)); }); return out; }
+/* ---- PDF од табела (html2canvas + jsPDF) ---- */
+function loadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`)) return res(); const sc=document.createElement('script'); sc.src=src; sc.onload=res; sc.onerror=rej; document.head.appendChild(sc); }); }
+async function makePdf(title, rows, head, filename, msgEl){
+  try{
+    msgEl.textContent='Правам PDF…';
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const PER=38; const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+    for(let i=0;i<rows.length;i+=PER){
+      const div=document.createElement('div'); div.style.cssText='position:fixed;left:-10000px;top:0;width:794px;background:#fff;color:#000;padding:28px;font:13px Arial,sans-serif';
+      div.innerHTML=`<div style="display:flex;justify-content:space-between;margin-bottom:10px"><b style="font-size:16px">Merifarm — ${esc(title)}</b><span>стр. ${Math.floor(i/PER)+1}/${Math.ceil(rows.length/PER)} · ${new Date().toLocaleDateString('mk-MK')}</span></div>
+        <table style="width:100%;border-collapse:collapse"><tr>${head.map(h=>`<th style="border:1px solid #999;padding:4px 6px;text-align:left;background:#eee">${esc(h)}</th>`).join('')}<th style="border:1px solid #999;padding:4px 6px;width:60px">✓</th></tr>
+        ${rows.slice(i,i+PER).map(r=>r.h!==undefined?`<tr><td colspan="${head.length+1}" style="border:1px solid #999;padding:6px;background:#dfe9e6;font-weight:bold">${esc(r.h)}</td></tr>`:`<tr>${r.map((c,k)=>`<td style="border:1px solid #999;padding:4px 6px;${k>=2&&!isNaN(String(c).replace(/[.,\s]/g,''))?'text-align:right':''}">${esc(c)}</td>`).join('')}<td style="border:1px solid #999"></td></tr>`).join('')}</table>`;
+      document.body.appendChild(div);
+      const canvas=await html2canvas(div,{scale:2,backgroundColor:'#fff'}); div.remove();
+      const img=canvas.toDataURL('image/jpeg',0.92); const w=210, h=canvas.height*w/canvas.width;
+      if(i>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,0,w,Math.min(h,297));
+    }
+    dl(filename, pdf.output('blob')); msgEl.textContent='PDF е подготвен';
+  }catch(e){ msgEl.textContent='Грешка: '+(e.message||e); }
+}
+
+async function viewArtikli(term){
+  term=(term||'').trim();
+  main.innerHTML='<div class="empty">Пребарувам…</div>';
+  await loadTags();
+  let where='true';
+  const tagm=term.match(/^#(.+)$/);
+  if(tagm){ where=`exists (select 1 from article_tags at join tags t on t.id=at.tag_id where at.sifra=o.sifra and t.ime ilike '${sq(tagm[1].trim())}')`; }
+  else if(term){ const words=term.split(/\s+/).map(sq); where = /^\d+$/.test(term) ? `o.sifra like '${term}%'` : words.map(w=>`o.ime ilike '%${w}%'`).join(' and '); }
+  const F=window.AF||(window.AF={filter:'aktivni',sort:'ime',page:0});
+  const fw={aktivni:"o.aktiven and o.ime not like '%(неактивен)'",zaliha:"o.zaliha>0",bez:"o.zaliha>0 and (o.posledna_prodazba is null or o.posledna_prodazba<current_date-180)",minus:"o.zaliha<0",neakt:"(not o.aktiven or o.ime like '%(неактивен)')",site:"true"}[F.filter];
+  const ord={ime:"o.ime",prod:"o.prod_30 desc nulls last, o.ime",zal:"o.zaliha desc nulls last, o.ime",cena:"o.cena desc nulls last"}[F.sort];
+  const PAGE=200;
+  const [rows,[tot]]=await Promise.all([sql(`select o.sifra,o.ime,o.cena,o.zaliha,o.prod_30,o.tagovi from article_ov o where ${where} and ${fw} order by ${ord} limit ${PAGE+1} offset ${F.page*PAGE}`),
+    sql(`select count(*) n from article_ov o where ${where} and ${fw}`)]);
+  const more=rows.length>PAGE; if(more) rows.pop();
+  const [st]=await sql(`select (select max(datum) from sales_daily) prod_do, (select max(datum) from stock_snapshots) zaliha_do,
+    (select opis from import_log where opis is not null order by created_at desc limit 1) posleden,
+    (select to_char(max(created_at) at time zone 'Europe/Skopje','DD.MM.YYYY HH24:MI') from import_log) uvezen,
+    (select gaps from coverage_cache where id=1) gaps`);
+  const gaps=st.gaps||[]; const dmy=d=>d?d.slice(8)+'.'+d.slice(5,7)+'.'+d.slice(0,4):'—';
+  const gapTxt=gaps.length?gaps.map(g=>g.dena>1?`${dmy(g.od)} – ${dmy(g.do_)} (${g.dena} дена)`:dmy(g.od)).join(', '):'';
+  main.innerHTML=`<div class="card" style="margin-bottom:14px;padding:10px 14px"><div class="inline" style="gap:18px">
+      <span><span class="hint">Последен извештај:</span> <b>${esc(st.posleden||('продажба до '+dmy(st.prod_do)))}</b> <span class="hint">· увезен ${esc(st.uvezen||'')}</span></span>
+      <span><span class="hint">Залиха на:</span> <b>${dmy(st.zaliha_do)}</b></span>
+      <span>${gaps.length?`<span class="down">⚠ Фали извештај за: ${esc(gapTxt)}</span>`:`<span class="up">✓ Сите денови од 01.01.2024 до ${dmy(st.prod_do)} се покриени</span>`}</span>
+    </div></div>
+    <h1>${term?'Резултати за „'+esc(term)+'“':'Артикли'}</h1>
+    <div class="inline" style="margin-bottom:10px">${[['aktivni','Активни'],['zaliha','На залиха'],['bez','Без продажба 6 мес.'],['minus','Во минус'],['neakt','Неактивни'],['site','Сите']].map(([k,l])=>`<button class="tab${F.filter===k?' on':''}" data-f="${k}">${l}</button>`).join('')}
+      <span class="hint" style="margin-left:auto">Подреди:</span><select id="asort">${[['ime','по име'],['prod','по продажба 30 д.'],['zal','по залиха'],['cena','по цена']].map(([k,l])=>`<option value="${k}"${F.sort===k?' selected':''}>${l}</option>`).join('')}</select></div>
+    <p class="sub">${fmt(tot.n)} артикли · прикажани ${F.page*PAGE+1}–${F.page*PAGE+rows.length} · пиши <span class="code">#таг</span> за филтер по таг</p>
+    <div class="card twrap"><table><tr><th><input type="checkbox" id="selall"></th><th>Артикл</th><th class="n">Цена</th><th class="n">Залиха</th><th class="n">30 д.</th></tr>
+    ${rows.length?rows.map(r=>`<tr><td><input type="checkbox" class="sel" value="${r.sifra}"></td><td><a class="art" href="#" data-mini="${r.sifra}">${esc(r.ime)}</a> <a class="plus" href="#a${r.sifra}" title="Отвори картичка">+</a><div class="code">${r.sifra}${r.tagovi?' · '+esc(r.tagovi):''}</div></td><td class="n">${fmt2(r.cena)}</td><td class="n"${+r.zaliha<0?' style="color:var(--bad)"':''}>${fmt(r.zaliha)}</td><td class="n">${fmt(r.prod_30)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Ништо не е најдено</td></tr>'}</table></div>
+    <div class="inline" style="margin-top:10px">${F.page>0?'<button class="btn sec" id="pprev">← Претходни 200</button>':''}${more?'<button class="btn sec" id="pnext">Следни 200 →</button>':''}</div>
+    <div class="bulk"><div class="hint" style="margin:0 0 6px">Додај таг на избраните (<span id="selcnt">0</span>)</div>${tagPicker('bulkpick')}</div>`;
+  wireMini(main);
+  main.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ F.filter=b.dataset.f; F.page=0; viewArtikli(term); });
+  document.getElementById('asort').onchange=e=>{ F.sort=e.target.value; F.page=0; viewArtikli(term); };
+  const pp=document.getElementById('pprev'), pn=document.getElementById('pnext'); if(pp) pp.onclick=()=>{F.page--; viewArtikli(term); window.scrollTo(0,0);}; if(pn) pn.onclick=()=>{F.page++; viewArtikli(term); window.scrollTo(0,0);};
+  const cnt=document.getElementById('selcnt'); const upd=()=>{cnt.textContent=document.querySelectorAll('.sel:checked').length;};
+  document.querySelectorAll('.sel').forEach(c=>c.onchange=upd);
+  document.getElementById('selall').onchange=e=>{document.querySelectorAll('.sel').forEach(c=>c.checked=e.target.checked);upd();};
+  wirePicker(document.getElementById('bulkpick'), async(gid,gname,name)=>{
+    const sel=[...document.querySelectorAll('.sel:checked')].map(c=>c.value); if(!sel.length) throw new Error('Нема избрани артикли');
+    const tid=await ensureTag(gid,gname,name);
+    await sql(`insert into article_tags(sifra,tag_id) select unnest(array[${sel.map(s=>`'${s}'`).join(',')}]), ${+tid} on conflict do nothing`);
+    await loadTags(true); toast(document.querySelector('#bulkpick .msg'),`Тагот „${name}“ е додаден на ${sel.length} артикли`);
+  });
+}
+
+async function viewTagovi(){
+  main.innerHTML='<div class="empty">Вчитувам тагови…</div>';
+  const rows=await sql(`select g.ime grupa, t.ime taga, t.id, count(at.sifra) n from tag_groups g join tags t on t.group_id=g.id left join article_tags at on at.tag_id=t.id group by 1,2,3,g.redosled order by g.redosled,g.ime,n desc,t.ime`);
+  const groups={}; rows.forEach(r=>(groups[r.grupa]??=[]).push(r));
+  main.innerHTML=`<h1>Тагови</h1><p class="sub">Клик на таг = листа на артиклите. Нови тагови се додаваат од страницата на артикл или масовно од листата „Артикли“.</p>
+    ${Object.entries(groups).map(([g,ts])=>`<h2>${esc(g)}</h2><div class="card">${ts.map(t=>`<a class="chip" style="text-decoration:none" href="#artikli" data-tag="${esc(t.taga)}">${esc(t.taga)} <span class="g">${fmt(t.n)}</span></a>`).join('')}</div>`).join('')}`;
+  main.querySelectorAll('[data-tag]').forEach(a=>a.onclick=()=>{ q.value='#'+a.dataset.tag; });
+}
+
+async function viewVlezovi(){
+  main.innerHTML='<div class="empty">Вчитувам влезови…</div>';
+  const [rows,dob]=await Promise.all([sql(`select r.id,r.broj,r.datum,r.dospeva,r.br_faktura,s.ime dobavuvac,s.id sid,r.nab_bez_ddv,r.obvrska,(select count(*) from receipt_items ri where ri.receipt_id=r.id) stavki from receipts r left join suppliers s on s.id=r.supplier_id order by r.datum desc, r.id desc limit 200`),sql(`select s.id,s.ime,count(r.id) n,sum(r.obvrska) obv,max(r.datum) posleden from suppliers s left join receipts r on r.supplier_id=s.id group by 1,2 order by obv desc nulls last, s.ime`)]);
+  main.innerHTML=`<h1>Влезови</h1><p class="sub">${rows.length} приемни листови · клик на број = ставки</p>
+    <div class="row"><div><h2>Последни приемни листови</h2><div class="card twrap"><table><tr><th>Датум</th><th>Добавувач</th><th>Бр. / фактура</th><th class="n">Ставки</th><th class="n">Обврска</th><th>Доспева</th></tr>
+      ${rows.length?rows.map(r=>`<tr><td>${esc(r.datum)}</td><td>${r.sid?`<a class="art" href="#d${r.sid}">${esc(r.dobavuvac)}</a>`:'—'}</td><td><a class="art" href="#r${r.id}"><span class="code">${esc(r.broj)}</span></a>${r.br_faktura?'<div class="code">ф. '+esc(r.br_faktura)+'</div>':''}</td><td class="n">${r.stavki}</td><td class="n">${fmt(r.obvrska)}</td><td>${esc(r.dospeva||'')}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Уште нема увезени приемни листови</td></tr>'}</table></div></div>
+    <div><h2>Добавувачи</h2><div class="card twrap"><table><tr><th>Добавувач</th><th class="n">Приеми</th><th class="n">Вкупно обврски</th><th>Последен</th></tr>
+      ${dob.map(d=>`<tr><td><a class="art" href="#d${d.id}">${esc(d.ime)}</a></td><td class="n">${d.n}</td><td class="n">${fmt(d.obv)}</td><td>${esc(d.posleden||'')}</td></tr>`).join('')}</table></div></div></div>`;
+}
+async function viewPriem(id){
+  main.innerHTML='<div class="empty">Вчитувам приемен лист…</div>';
+  const [r]=await sql(`select r.*,s.ime dobavuvac,s.id sid from receipts r left join suppliers s on s.id=r.supplier_id where r.id=${+id}`);
+  if(!r){ main.innerHTML='<div class="empty">Не постои</div>'; return; }
+  const it=await sql(`select ri.*,a.ime from receipt_items ri join articles a on a.sifra=ri.sifra where ri.receipt_id=${+id} order by ri.rbr`);
+  main.innerHTML=`<a class="back" href="#vlezovi">← Влезови</a><h1 style="margin-top:6px">Приемен лист ${esc(r.broj)}</h1>
+    <p class="sub">${esc(r.datum)} · ${r.sid?`<a class="art" href="#d${r.sid}">${esc(r.dobavuvac)}</a>`:'—'} · фактура ${esc(r.br_faktura||'—')} · доспева ${esc(r.dospeva||'—')}</p>
+    <div class="tiles"><div class="tile"><div class="l">Набавна без ДДВ</div><div class="v">${fmt(r.nab_bez_ddv)}</div></div><div class="tile"><div class="l">ДДВ</div><div class="v">${fmt(r.ddv)}</div></div><div class="tile"><div class="l">Обврска кон добавувач</div><div class="v">${fmt(r.obvrska)}</div></div><div class="tile"><div class="l">Продажна вредност со ДДВ</div><div class="v">${fmt(r.prod_so_ddv)}</div></div></div>
+    <h2>Ставки</h2><div class="card twrap"><table><tr><th>#</th><th>Артикл</th><th class="n">Кол.</th><th class="n">Наб. цена</th><th class="n">Износ</th><th class="n">ДДВ %</th><th class="n">Прод. цена</th></tr>
+      ${it.map(i=>`<tr><td>${i.rbr}</td><td><a class="art" href="#a${i.sifra}">${esc(i.ime)}</a><div class="code">${i.sifra}</div></td><td class="n">${fmt1(i.kol)}</td><td class="n">${fmt2(i.nab_cena)}</td><td class="n">${fmt2(i.nab_iznos)}</td><td class="n">${fmt(i.ddv_stapka)}</td><td class="n">${fmt2(i.prod_cena)}</td></tr>`).join('')}</table></div>`;
+}
+async function viewDobavuvac(id){
+  main.innerHTML='<div class="empty">Вчитувам добавувач…</div>';
+  const [s]=await sql(`select * from suppliers where id=${+id}`);
+  if(!s){ main.innerHTML='<div class="empty">Не постои</div>'; return; }
+  const [rows,inv]=await Promise.all([sql(`select r.id,r.broj,r.datum,r.dospeva,r.br_faktura,r.obvrska,(select count(*) from receipt_items ri where ri.receipt_id=r.id) stavki from receipts r where r.supplier_id=${+id} order by r.datum desc, r.id desc limit 200`),sql(`select broj,datum,datum_dospevanje,iznos_so_ddv,plateno,ostatok,dospeano_neplateno from invoice_status where supplier_id=${+id} order by datum_dospevanje`)]);
+  const dolg=inv.reduce((a,i)=>a+(+i.ostatok),0), dosp=inv.filter(i=>i.dospeano_neplateno).reduce((a,i)=>a+(+i.ostatok),0);
+  const top=await sql(`select ri.sifra,a.ime,sum(ri.kol) kol,sum(ri.nab_iznos) iznos,max(r.datum) posleden from receipt_items ri join receipts r on r.id=ri.receipt_id join articles a on a.sifra=ri.sifra where r.supplier_id=${+id} group by 1,2 order by iznos desc limit 20`);
+  main.innerHTML=`<a class="back" href="#vlezovi">← Влезови</a><h1 style="margin-top:6px">${esc(s.ime)}</h1><p class="sub"><span class="code">${esc(s.kod||'')}</span></p>
+    <div class="tiles"><div class="tile"><div class="l">Отворени фактури</div><div class="v">${inv.filter(i=>+i.ostatok>0.01).length}</div></div><div class="tile${dolg>0?' warn':''}"><div class="l">Вкупен долг</div><div class="v">${fmt(dolg)}</div></div><div class="tile${dosp>0?' bad':''}"><div class="l">Доспеано, неплатено</div><div class="v">${fmt(dosp)}</div></div><div class="tile"><div class="l">Приемни листови</div><div class="v">${rows.length}</div></div></div>
+    <div class="row"><div><h2>Фактури</h2><div class="card twrap"><table><tr><th>Број</th><th>Датум</th><th>Доспева</th><th class="n">Износ</th><th class="n">Остаток</th></tr>
+      ${inv.length?inv.map(i=>`<tr${i.dospeano_neplateno?' style="color:var(--bad)"':''}><td class="code">${esc(i.broj)}</td><td>${esc(i.datum||'')}</td><td>${esc(i.datum_dospevanje||'')}</td><td class="n">${fmt(i.iznos_so_ddv)}</td><td class="n">${fmt(i.ostatok)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Нема</td></tr>'}</table></div></div>
+    <div><h2>Најнабавувани артикли</h2><div class="card twrap"><table><tr><th>Артикл</th><th class="n">Кол.</th><th class="n">Износ</th><th>Последен</th></tr>
+      ${top.map(t=>`<tr><td><a class="art" href="#a${t.sifra}">${esc(t.ime)}</a></td><td class="n">${fmt1(t.kol)}</td><td class="n">${fmt(t.iznos)}</td><td>${esc(t.posleden)}</td></tr>`).join('')}</table></div></div></div>
+    <h2>Приемни листови</h2><div class="card twrap"><table><tr><th>Датум</th><th>Број / фактура</th><th class="n">Ставки</th><th class="n">Обврска</th><th>Доспева</th></tr>
+      ${rows.map(r=>`<tr><td>${esc(r.datum)}</td><td><a class="art" href="#r${r.id}"><span class="code">${esc(r.broj)}</span></a>${r.br_faktura?' <span class="code">ф. '+esc(r.br_faktura)+'</span>':''}</td><td class="n">${r.stavki}</td><td class="n">${fmt(r.obvrska)}</td><td>${esc(r.dospeva||'')}</td></tr>`).join('')}</table></div>`;
+}
+
+/* ---------- Нарачки (потврдени) ---------- */
+async function viewNaracki(){
+  main.innerHTML='<div class="empty">Вчитувам нарачки…</div>';
+  const rows=await sql(`select o.id,o.datum,o.naziv,o.do_datum,o.status,o.parent_id,(select count(*) from order_items i where i.order_id=o.id) n,(select count(*) filter (where status='ima') from order_items i where i.order_id=o.id) ima,(select count(*) filter (where status='nema') from order_items i where i.order_id=o.id) nema,(select count(distinct coalesce(dobavuvac,'')) from order_items i where i.order_id=o.id) dob from orders o order by o.datum desc, o.id desc`);
+  main.innerHTML=`<h1>Нарачки</h1><p class="sub">Потврдени нарачки по датум · клик за работа по добавувачи</p>
+    <div class="card twrap"><table><tr><th>Датум</th><th>Нарачка</th><th class="n">Артикли</th><th class="n">Добавувачи</th><th class="n">Има</th><th class="n">Нема</th><th>Статус</th></tr>
+    ${rows.length?rows.map(r=>`<tr><td>${esc(r.datum)}</td><td><a class="art" href="#o${r.id}">${esc(r.naziv)}</a>${r.do_datum?'<div class="code">роба до '+esc(r.do_datum)+'</div>':''}</td><td class="n">${r.n}</td><td class="n">${r.dob}</td><td class="n up">${r.ima}</td><td class="n down">${r.nema}</td><td>${r.n>0&&+r.ima+ +r.nema===+r.n?'<span class="chip">завршена</span>':'<span class="chip bad" style="background:var(--accent-soft);color:var(--accent)">во тек</span>'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Нема потврдени нарачки. Направи ја од Преглед → Нарачка → „Потврди нарачка“.</td></tr>'}</table></div>`;
+}
+async function viewNaracka(id){
+  main.innerHTML='<div class="empty">Вчитувам нарачка…</div>';
+  const [[o],items,alld]=await Promise.all([sql(`select * from orders where id=${+id}`),
+    sql(`select i.id,i.sifra,i.kolicina,i.dobavuvac,i.status,a.ime from order_items i join articles a on a.sifra=i.sifra where i.order_id=${+id} order by i.dobavuvac nulls last, a.ime`),
+    sql(`select d from (select dobavuvac_sw d from articles where dobavuvac_sw is not null union select ime from suppliers) x group by 1 order by 1`)]);
+  if(!o){ main.innerHTML='<div class="empty">Нарачката не постои</div>'; return; }
+  const groups={}; items.forEach(i=>{ const k=i.dobavuvac||''; (groups[k] ??= []).push(i); });
+  const active=Object.keys(groups).sort((a,b)=>(a===''?1:0)-(b===''?1:0)||a.localeCompare(b));
+  const rest=alld.map(d=>d.d).filter(d=>!groups[d]);
+  const key=d=>encodeURIComponent(d);
+  main.innerHTML=`<a class="back" href="#naracki">← Нарачки</a><h1 style="margin-top:6px">${esc(o.naziv)}</h1><p class="sub">${esc(o.datum)} · ${items.length} артикли${o.do_datum?' · роба до '+esc(o.do_datum):''}</p>
+    <div class="inline" style="margin-bottom:10px"><button class="btn" id="pdfall">PDF — целата нарачка по добавувачи</button><span id="pdfallmsg" class="hint"></span></div>
+    <h2>Добавувачи со артикли за нарачка</h2>
+    <div class="card">${active.map(d=>{ const g=groups[d]; const done=g.filter(i=>i.status!=='ceka').length; const nema=g.filter(i=>i.status==='nema').length;
+      return `<div class="inline" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><div><a class="art" style="color:var(--good);font-size:16px" href="#oc${o.id}_${key(d)}">${d?esc(d):'(без добавувач)'}</a> <span class="hint">${g.length} артикли · ${done}/${g.length} проверени${nema?' · <span class="down">'+nema+' нема</span>':''}</span></div>
+        <div class="inline"><button class="btn sec pdfd" data-d="${esc(d)}">PDF</button><a class="btn" href="#oc${o.id}_${key(d)}">Отвори</a></div></div>`; }).join('')}</div>
+    <h2>Останати добавувачи</h2><div class="card"><div class="inline">${rest.map(d=>`<span class="chip" style="background:var(--line);color:var(--muted)">${esc(d)}</span>`).join('')}</div></div>
+    <h2>Сите артикли</h2><div class="card twrap"><table><tr><th>Артикл</th><th>Добавувач</th><th class="n">Кол.</th><th>Статус</th></tr>
+      ${items.map(i=>`<tr><td><a class="art" href="#a${i.sifra}">${esc(i.ime)}</a> <span class="code">${i.sifra}</span></td><td>${esc(i.dobavuvac||'')}</td><td class="n">${fmt1(i.kolicina)}</td><td>${i.status==='ima'?'<span class="up">✓ има</span>':i.status==='nema'?'<span class="down">✗ нема</span>':'<span class="hint">чека</span>'}</td></tr>`).join('')}</table></div>`;
+  document.getElementById('pdfall').onclick=()=>makePdf(`${o.naziv} · ${o.datum}`, groupedRows(items,i=>i.dobavuvac,i=>[i.sifra,i.ime,fmt1(i.kolicina)]), ['Шифра','Артикл','Количина'], `naracka-${o.datum}-site.pdf`, document.getElementById('pdfallmsg'));
+  main.querySelectorAll('.pdfd').forEach(b=>b.onclick=()=>{ const d=b.dataset.d; const g=groups[d]; const msg=document.createElement('span'); b.after(msg);
+    makePdf(`Нарачка · ${d||'без добавувач'} · ${o.datum}`, g.map(i=>[i.sifra,i.ime,fmt1(i.kolicina)]), ['Шифра','Артикл','Количина'], `naracka-${(d||'bez').replace(/[^\w]+/g,'_')}-${o.datum}.pdf`, msg); });
+}
+async function viewCheck(h){
+  const m=h.match(/^oc(\d+)_(.*)$/); const oid=+m[1]; const dob=decodeURIComponent(m[2]);
+  main.innerHTML='<div class="empty">Вчитувам…</div>';
+  const [[o],items,alld]=await Promise.all([sql(`select * from orders where id=${oid}`),
+    sql(`select i.id,i.sifra,i.kolicina,i.status,i.dobavuvac,a.ime,st.zaliha from order_items i join articles a on a.sifra=i.sifra left join article_stats st on st.sifra=i.sifra where i.order_id=${oid} and coalesce(i.dobavuvac,'')='${sq(dob)}' order by a.ime`),
+    sql(`select d from (select dobavuvac_sw d from articles where dobavuvac_sw is not null union select ime from suppliers) x group by 1 order by 1`)]);
+  let cur=Math.max(0, items.findIndex(i=>i.status==='ceka'));
+  const noDob = dob==='';
+  main.innerHTML=`<a class="back" href="#o${oid}">← ${esc(o.naziv)}</a><h1 style="margin-top:6px">${dob?esc(dob):'Без добавувач'}</h1>
+    <p class="sub">${items.length} артикли · <b>↓ ↑</b> движење · <b>Enter</b> = има (зелено) · <b>Space</b> = нема (црвено) · или кликни ✓ / ✗</p>
+    ${noDob?'<datalist id="dobl2">'+alld.map(d=>`<option value="${esc(d.d)}">`).join('')+'</datalist>':''}
+    <div class="card" id="chk">${items.map((i,k)=>`<div class="ci ${i.status}" data-id="${i.id}" data-k="${k}" tabindex="0">
+        <div style="flex:1;min-width:0"><b>${esc(i.ime)}</b> <span class="code">${i.sifra}</span><div class="hint">залиха ${fmt1(i.zaliha)}</div>${noDob?`<input class="ci-d" list="dobl2" placeholder="добавувач" value="" style="margin-top:4px;width:200px">`:''}</div>
+        <div class="bigq">${fmt1(i.kolicina)}</div><div class="inline"><button class="ok" title="Има (Enter)">✓</button><button class="no" title="Нема (Space)">✗</button></div></div>`).join('')}</div>
+    <div class="inline" style="margin-top:12px"><button class="btn" id="finish">Заврши — „нема“ одат во „Пробај на друго место“</button><a class="btn sec" href="#o${oid}">Назад</a><span id="cmsg" class="hint"></span></div>`;
+  const els=[...main.querySelectorAll('.ci')];
+  const focus=k=>{ cur=Math.max(0,Math.min(els.length-1,k)); els.forEach((e,i)=>e.classList.toggle('cur',i===cur)); els[cur].scrollIntoView({block:'center',behavior:'smooth'}); };
+  const setStatus=async(k,st)=>{ const e=els[k]; e.classList.remove('ima','nema','ceka'); e.classList.add(st); items[k].status=st;
+    try{ await sql(`update order_items set status='${st}' where id=${+e.dataset.id}`); }catch(err){ document.getElementById('cmsg').textContent=err.message; }
+    focus(k+1); };
+  els.forEach((e,k)=>{ e.querySelector('.ok').onclick=ev=>{ev.stopPropagation(); setStatus(k,'ima');}; e.querySelector('.no').onclick=ev=>{ev.stopPropagation(); setStatus(k,'nema');}; e.onclick=()=>focus(k);
+    const di=e.querySelector('.ci-d'); if(di){ let t; di.oninput=()=>{ clearTimeout(t); t=setTimeout(()=>sql(`update order_items set dobavuvac=${di.value.trim()?`'${sq(di.value.trim())}'`:'null'} where id=${+e.dataset.id}`).catch(()=>{}),600); }; di.onkeydown=ev=>ev.stopPropagation(); } });
+  const keyh=ev=>{ if(!document.getElementById('chk')) { window.removeEventListener('keydown',keyh); return; }
+    if(ev.key==='ArrowDown'){ ev.preventDefault(); focus(cur+1); } else if(ev.key==='ArrowUp'){ ev.preventDefault(); focus(cur-1); }
+    else if(ev.key==='Enter'){ ev.preventDefault(); setStatus(cur,'ima'); } else if(ev.key===' '){ ev.preventDefault(); setStatus(cur,'nema'); } };
+  window.addEventListener('keydown',keyh);
+  if(els.length) focus(cur);
+  document.getElementById('finish').onclick=async()=>{ const b=document.getElementById('finish'); b.disabled=true;
+    try{ const [r]=await sql(`select order_finish_supplier(${oid}, ${dob?`'${sq(dob)}'`:'null'}) id`); const nema=items.filter(i=>i.status==='nema').length;
+      document.getElementById('cmsg').textContent = r.id ? `${nema} артикли се префрлени во „Пробај да најдеш на друго место“.` : 'Нема артикли со „нема“ — сè е нарачано.';
+      setTimeout(()=>location.hash= r.id ? 'o'+r.id : 'o'+oid, 1200); }
+    catch(e){ document.getElementById('cmsg').textContent=e.message; b.disabled=false; } };
+}
+
+/* ---------- рокови / проверки ---------- */
+const rokFmt=d=>d?d.slice(5,7)+'.'+d.slice(0,4):'—';
+let PTAB='proverki';
+async function viewProverki(){
+  main.innerHTML='<div class="empty">Ги распоредувам продажбите по рокови…</div>';
+  await sql(`select fefo_apply()`);
+  const [al,pend,exp,hist,[cnt]]=await Promise.all([sql(`select a.id,a.sifra,a.tip,a.poraka,a.datum,a.lot_id,ar.ime,l.rok,l.pocetna,(select coalesce(sum(kolicina),0) from lots where sifra=a.sifra and status='aktivna' and id<>coalesce(a.lot_id,0)) ostanato_drugi from lot_alerts a join articles ar on ar.sifra=a.sifra left join lots l on l.id=a.lot_id where a.status='otvoren' order by a.datum, ar.ime`),sql(`select p.id,p.sifra,p.kolicina,p.datum,ar.ime,r.broj,s.ime dobavuvac from lot_pending p join articles ar on ar.sifra=p.sifra left join receipts r on r.id=p.receipt_id left join suppliers s on s.id=r.supplier_id where p.status='ceka' order by p.datum, ar.ime`),sql(`select l.sifra,l.ime,l.rok,l.kolicina,l.dena_do_rok from lot_overview l where l.kolicina>0 order by l.rok limit 300`),sql(`select a.datum,a.resolved_at,ar.ime,a.sifra,a.poraka,a.status,a.odgovor from lot_alerts a join articles ar on ar.sifra=a.sifra where a.status<>'otvoren' order by a.resolved_at desc limit 50`),sql(`select (select count(*) from lot_state) sledeni, (select count(*) from lot_overview where kolicina>0) serii`)]);
+  const tabs=[['proverki',`Проверки (${al.length})`],['cekanje',`На чекање за рок (${pend.length})`],['rokovi','Листа на рокови'],['istorija','Историја']];
+  const bucket=d=>d<0?'истечен':d<=90?'до 3 мес.':d<=180?'до 6 мес.':d<=365?'до 12 мес.':'над 12 мес.';
+  main.innerHTML=`<h1>Рокови</h1><p class="sub">${cnt.sledeni} артикли со следење на рокови · ${cnt.serii} активни серии · продажбата се распоредува по принцип „најкраток рок прв“</p>
+    <div class="tabs">${tabs.map(([k,l])=>`<button class="tab${PTAB===k?' on':''}" data-tab="${k}">${l}</button>`).join('')}</div>
+    <div id="tab-proverki" ${PTAB!=='proverki'?'hidden':''}>
+      <div class="inline" style="margin-bottom:10px"><button class="btn sec" id="dl">Преземи листа за печатење</button><span class="hint">Листата се кумулира додека не одговориш на секоја ставка.</span></div>
+      ${al.length?al.map(a=>`<div class="card alert" id="al${a.id}" style="margin-bottom:10px">
+        <div class="inline" style="justify-content:space-between"><div><a class="art" href="#a${a.sifra}">${esc(a.ime)}</a> <span class="code">${a.sifra}</span><div class="hint">${esc(a.datum)}${a.rok?' · серија со рок '+rokFmt(a.rok)+' ('+fmt1(a.pocetna)+' парч.)':''}</div></div></div>
+        <p style="margin:8px 0">${esc(a.poraka)}</p>
+        ${a.tip==='iscrpena'?`<div class="inline"><button class="btn ok-btn" data-ok="${a.id}">✓ Да, продадени се</button><button class="btn sec" data-no="${a.id}">✗ Не, останале</button><span class="msg"></span></div>
+          <div class="inline corr" hidden style="margin-top:8px"><span>Колку парчиња останале со рок ${rokFmt(a.rok)}?</span><input type="number" min="0" step="1" style="width:90px" class="ost"><button class="btn" data-fix="${a.id}">Нивелирај</button><span class="hint">ќе се одземат од сериите со подобар рок (има ${fmt1(a.ostanato_drugi)})</span></div>`
+          :`<div class="inline"><a class="btn sec" href="#a${a.sifra}">Отвори артикл и внеси контрола</a><button class="btn sec" data-ok="${a.id}">Затвори</button><span class="msg"></span></div>`}
+      </div>`).join(''):'<div class="card empty">Нема отворени проверки. ✓</div>'}
+    </div>
+    <div id="tab-cekanje" ${PTAB!=='cekanje'?'hidden':''}>
+      <p class="hint" style="margin:0 0 10px">Нови пратки за артикли што се следат. Внеси го рокот од пратката (ММ.ГГГГ) и количината станува серија.</p>
+      <div class="card twrap"><table><tr><th>Датум</th><th>Артикл</th><th>Приемен лист</th><th class="n">Кол.</th><th>Рок</th><th></th></tr>
+      ${pend.length?pend.map(p=>`<tr id="pd${p.id}"><td>${esc(p.datum||'')}</td><td><a class="art" href="#a${p.sifra}">${esc(p.ime)}</a><div class="code">${p.sifra}</div></td><td><span class="code">${esc(p.broj||'')}</span><div class="hint">${esc(p.dobavuvac||'')}</div></td><td class="n">${fmt1(p.kolicina)}</td><td><input class="rok" placeholder="ММ.ГГГГ" style="width:110px"></td><td><button class="btn" data-pend="${p.id}">Запиши</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Нема пратки на чекање</td></tr>'}</table></div>
+    </div>
+    <div id="tab-rokovi" ${PTAB!=='rokovi'?'hidden':''}>
+      <div class="tiles" style="margin-bottom:12px">${['истечен','до 3 мес.','до 6 мес.','до 12 мес.','над 12 мес.'].map(b=>{const x=exp.filter(e=>bucket(+e.dena_do_rok)===b); return `<div class="tile${b==='истечен'?' bad':b==='до 3 мес.'?' warn':''}"><div class="l">${b}</div><div class="v">${x.length}<small>серии · ${fmt(x.reduce((s,e)=>s+ +e.kolicina,0))} парч.</small></div></div>`;}).join('')}</div>
+      <div class="card twrap"><table><tr><th>Рок</th><th>Артикл</th><th class="n">Кол.</th><th class="n">Дена</th></tr>
+      ${exp.length?exp.map(e=>`<tr${+e.dena_do_rok<=90?' style="color:var(--bad)"':''}><td>${rokFmt(e.rok)}</td><td><a class="art" href="#a${e.sifra}">${esc(e.ime)}</a><div class="code">${e.sifra}</div></td><td class="n">${fmt1(e.kolicina)}</td><td class="n">${fmt(e.dena_do_rok)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Уште нема внесени рокови. Внеси контрола на страницата на артикл или преку Excel.</td></tr>'}</table></div>
+    </div>
+    <div id="tab-istorija" ${PTAB!=='istorija'?'hidden':''}><div class="card twrap"><table><tr><th>Кога</th><th>Артикл</th><th>Проверка</th><th>Одговор</th></tr>
+      ${hist.length?hist.map(h=>`<tr><td>${esc((h.resolved_at||'').slice(0,10))}</td><td><a class="art" href="#a${h.sifra}">${esc(h.ime)}</a></td><td class="hint">${esc(h.poraka)}</td><td>${h.status==='potvrden'?'<span class="up">✓ продадени</span>':h.status==='korigiran'?'<span class="down">✗ '+esc(h.odgovor)+'</span>':esc(h.status)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Празно</td></tr>'}</table></div></div>`;
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ PTAB=b.dataset.tab; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b)); tabs.forEach(([k])=>document.getElementById('tab-'+k).hidden=k!==PTAB); });
+  main.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await sql(`select alert_confirm(${+b.dataset.ok})`); document.getElementById('al'+b.dataset.ok).remove(); }catch(e){ toast(b.parentElement.querySelector('.msg'),e.message,true); b.disabled=false; } });
+  main.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{ const c=document.getElementById('al'+b.dataset.no).querySelector('.corr'); c.hidden=false; c.querySelector('.ost').focus(); });
+  main.querySelectorAll('[data-fix]').forEach(b=>b.onclick=async()=>{ const card=document.getElementById('al'+b.dataset.fix); const v=card.querySelector('.ost').value; if(v==='') return; b.disabled=true;
+    try{ await sql(`select alert_correct(${+b.dataset.fix}, ${+v})`); card.remove(); }catch(e){ toast(card.querySelector('.msg'),e.message,true); b.disabled=false; } });
+  main.querySelectorAll('[data-pend]').forEach(b=>b.onclick=async()=>{ const tr=document.getElementById('pd'+b.dataset.pend); const rok=parseRok(tr.querySelector('.rok').value); if(!rok){ tr.querySelector('.rok').focus(); return; } b.disabled=true;
+    try{ await sql(`select lot_pending_resolve(${+b.dataset.pend}, '${rok}')`); tr.remove(); }catch(e){ b.disabled=false; alertInline(tr,e.message); } });
+  document.getElementById('dl').onclick=async()=>{ const today=new Date().toISOString().slice(0,10);
+    const html=`<!doctype html><html lang="mk"><head><meta charset="utf-8"><title>Проверки на рокови ${today}</title><style>body{font:13px/1.4 Arial,sans-serif;padding:20px}h1{font-size:18px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:6px;text-align:left;vertical-align:top}.b{width:22px;height:22px;border:1px solid #333;display:inline-block;margin-right:6px}#login{max-width:380px;margin:60px auto;padding:0 16px}
+body.auth header,body.auth main{display:none}
+</style></head><body><h1>Merifarm — проверки на рокови, ${today}</h1>
+      <table><tr><th>Шифра</th><th>Артикл</th><th>Рок</th><th>Што да се провери</th><th>Да</th><th>Не — останале</th></tr>${al.map(a=>`<tr><td>${a.sifra}</td><td>${esc(a.ime)}</td><td>${rokFmt(a.rok)}</td><td>${esc(a.poraka)}</td><td><span class="b"></span></td><td><span class="b"></span> ______</td></tr>`).join('')}</table>
+      ${pend.length?`<h1>Пратки без внесен рок</h1><table><tr><th>Датум</th><th>Шифра</th><th>Артикл</th><th>Кол.</th><th>Рок</th></tr>${pend.map(p=>`<tr><td>${p.datum||''}</td><td>${p.sifra}</td><td>${esc(p.ime)}</td><td>${fmt1(p.kolicina)}</td><td>____.______</td></tr>`).join('')}</table>`:''}</body></html>`;
+    dl(`proverki-rokovi-${today}.html`, new Blob([html],{type:'text/html'})); };
+}
+function parseRok(v){ v=(v||'').trim(); let m=v.match(/^(\d{1,2})[.\/-](\d{4})$/); if(m) return `${m[2]}-${m[1].padStart(2,'0')}`; m=v.match(/^(\d{4})-(\d{2})$/); if(m) return v; m=v.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/); if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; return null; }
+function alertInline(el,msg){ let s=el.querySelector('.msg'); if(!s){ s=document.createElement('span'); s.className='msg'; el.appendChild(s);} toast(s,msg,true); }
+function lotsSection(sifra, lots, pend, state){
+  return `<div class="card">
+    ${state?`<div class="hint" style="margin-bottom:8px">Продажбата е распоредена до ${esc(state.applied_through)}.</div>`:'<div class="hint" style="margin-bottom:8px">Овој артикл уште не се следи по рокови. Внеси ја првата контрола подолу.</div>'}
+    <div class="twrap"><table><tr><th>Рок</th><th class="n">Останато</th><th class="n">Почетно</th><th class="n">Продадено</th><th class="n">Дена до рок</th><th>Извор</th></tr>
+    ${lots.length?lots.map(l=>`<tr${+l.dena_do_rok<=90?' style="color:var(--bad)"':''}><td>${rokFmt(l.rok)}</td><td class="n"><b>${fmt1(l.kolicina)}</b></td><td class="n">${fmt1(l.pocetna)}</td><td class="n">${fmt1(l.potroseno)}</td><td class="n">${fmt(l.dena_do_rok)}</td><td class="hint">${l.izvor==='priem'?'приемен лист':'контрола'} ${esc(l.datum_priem||'')}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Нема активни серии</td></tr>'}
+    ${lots.length?`<tr><td><b>Вкупно</b></td><td class="n"><b>${fmt1(lots.reduce((s,l)=>s+ +l.kolicina,0))}</b></td><td colspan="4"></td></tr>`:''}</table></div>
+    ${pend.length?`<h2 style="margin-top:14px">На чекање за рок</h2><div class="twrap"><table>${pend.map(p=>`<tr id="pd${p.id}"><td>${esc(p.datum||'')}</td><td class="n">${fmt1(p.kolicina)}</td><td><input class="rok" placeholder="ММ.ГГГГ" style="width:110px"></td><td><button class="btn" data-pend="${p.id}">Запиши</button></td></tr>`).join('')}</table></div>`:''}
+    <h2 style="margin-top:14px">Контрола на рокови (замена на сите серии)</h2>
+    <div id="lotrows"></div>
+    <div class="inline" style="margin-top:8px"><button class="btn sec" id="lotadd">+ ред</button><span class="hint">Датум на контрола</span><input type="date" id="lotdate" value="${new Date().toISOString().slice(0,10)}"><button class="btn" id="lotsave">Зачувај контрола</button><span id="lotmsg"></span></div>
+  </div>`;
+}
+function wireLots(sifra, reload){
+  const rows=document.getElementById('lotrows');
+  const addRow=()=>{ const d=document.createElement('div'); d.className='inline'; d.style.marginTop='6px'; d.innerHTML=`<input type="number" min="0" step="0.5" placeholder="количина" style="width:120px" class="lk"><input placeholder="рок ММ.ГГГГ" style="width:130px" class="lr"><button class="btn sec rm">×</button>`; d.querySelector('.rm').onclick=()=>d.remove(); rows.appendChild(d); };
+  addRow(); addRow();
+  document.getElementById('lotadd').onclick=addRow;
+  document.getElementById('lotsave').onclick=async()=>{ const msg=document.getElementById('lotmsg'); const parts=[];
+    for(const d of rows.querySelectorAll('.inline')){ const k=d.querySelector('.lk').value, r=parseRok(d.querySelector('.lr').value); if(k===''&&!d.querySelector('.lr').value) continue; if(k===''||!r){ toast(msg,'Провери количина и рок (ММ.ГГГГ)',true); return; } parts.push(`${+k}|${r}`); }
+    if(!parts.length){ toast(msg,'Внеси барем една серија',true); return; }
+    const b=document.getElementById('lotsave'); b.disabled=true;
+    try{ await sql(`select lots_set('${sifra}','${document.getElementById('lotdate').value}','${parts.join(';')}')`); reload(); }catch(e){ toast(msg,e.message,true); b.disabled=false; } };
+  document.querySelectorAll('[data-pend]').forEach(b=>b.onclick=async()=>{ const tr=document.getElementById('pd'+b.dataset.pend); const rok=parseRok(tr.querySelector('.rok').value); if(!rok){ tr.querySelector('.rok').focus(); return; } b.disabled=true;
+    try{ await sql(`select lot_pending_resolve(${+b.dataset.pend}, '${rok}')`); reload(); }catch(e){ b.disabled=false; alertInline(tr,e.message); } });
+}
+
+/* ---------- брендови ---------- */
+let BR={zb:'',br:'',hor:'all',mode:'k'};
+async function viewBrendovi(){
+  main.innerHTML='<div class="empty">Вчитувам брендови…</div>';
+  await loadTags(true);
+  const zbs=TAGS.filter(t=>t.grupa==='Збирен бренд'); const brs=TAGS.filter(t=>t.grupa==='Бренд');
+  const parents=await sql(`select id,parent_id from tags where parent_id is not null`); const par={}; parents.forEach(p=>par[p.id]=p.parent_id);
+  const sel=+BR.br||+BR.zb||0;
+  const brOpts=brs.filter(b=>!BR.zb||String(par[b.id])===String(BR.zb));
+  let head=`<h1>Брендови</h1>
+    <div class="card"><div class="inline">
+      <label class="hint">Збирен бренд</label><select id="selzb"><option value="">— сите —</option>${zbs.map(z=>`<option value="${z.id}"${String(z.id)===String(BR.zb)?' selected':''}>${esc(z.ime)}</option>`).join('')}</select>
+      <label class="hint">Бренд</label><select id="selbr"><option value="">— целиот збирен бренд —</option>${brOpts.map(b=>`<option value="${b.id}"${String(b.id)===String(BR.br)?' selected':''}>${esc(b.ime)}</option>`).join('')}</select>
+    </div>${(zbs.length+brs.length)?'':'<p class="hint" style="margin:10px 0 0">Уште нема брендови. Се полнат од извозот на шифрарникот со бренд/збирен бренд, или рачно преку таговите „Бренд“ и „Збирен бренд“ на артиклите.</p>'}</div>`;
+  if(!sel){ main.innerHTML=head+'<div class="empty">Избери бренд за анализа.</div>'; wireBrandSel(); return; }
+  const tag=TAGS.find(t=>String(t.id)===String(sel));
+  const [cfg]=await sql(`select (select max(datum) from sales_daily) last`); const Y=+cfg.last.slice(0,4); const last=cfg.last;
+  const [yrs,ytd,mon,[tg],[meta]]=await Promise.all([sql(`select extract(year from s.datum)::int y, sum(s.kolicina) kol, sum(s.kolicina*c.cena_bez_ddv) vred from sales_daily s join brand_articles(${sel}) b on b.sifra=s.sifra join article_cost c on c.sifra=s.sifra group by 1 order by 1`),sql(`select extract(year from s.datum)::int y, sum(s.kolicina) kol, sum(s.kolicina*c.cena_bez_ddv) vred from sales_daily s join brand_articles(${sel}) b on b.sifra=s.sifra join article_cost c on c.sifra=s.sifra where to_char(s.datum,'MM-DD')<='${last.slice(5)}' group by 1 order by 1`),sql(`select extract(year from s.datum)::int y, extract(month from s.datum)::int m, sum(s.kolicina*c.cena_bez_ddv) v from sales_daily s join brand_articles(${sel}) b on b.sifra=s.sifra join article_cost c on c.sifra=s.sifra group by 1,2 order by 1,2`),sql(`select iznos from brand_targets where tag_id=${sel} and godina=${Y}`),sql(`select count(*) n, count(*) filter (where c.od_vlez) so_vlez, sum(cs.kolicina*c.cena_bez_ddv) zaliha_vred, sum(st.prod_30) p30, sum(st.prod_90) p90, sum(st.prod_30_lani) p30l, sum(st.prod_90_lani) p90l from brand_articles(${sel}) b join article_cost c on c.sifra=b.sifra left join current_stock cs on cs.sifra=b.sifra left join article_stats st on st.sifra=b.sifra`)]);
+  const prods=await sql(`select a.sifra,a.ime,cs.kolicina zaliha,c.cena_bez_ddv,c.od_vlez,
+      sum(s.kolicina) filter (where extract(year from s.datum)=${Y-2}) k2, sum(s.kolicina*c.cena_bez_ddv) filter (where extract(year from s.datum)=${Y-2}) v2,
+      sum(s.kolicina) filter (where extract(year from s.datum)=${Y-1}) k1, sum(s.kolicina*c.cena_bez_ddv) filter (where extract(year from s.datum)=${Y-1}) v1,
+      sum(s.kolicina) filter (where extract(year from s.datum)=${Y}) k0, sum(s.kolicina*c.cena_bez_ddv) filter (where extract(year from s.datum)=${Y}) v0,
+      (select min(rok) from lots l where l.sifra=a.sifra and l.status='aktivna' and l.kolicina>0) rok
+    from brand_articles(${sel}) b join articles a on a.sifra=b.sifra join article_cost c on c.sifra=a.sifra left join current_stock cs on cs.sifra=a.sifra left join sales_daily s on s.sifra=a.sifra
+    group by 1,2,3,4,5 order by a.ime`);
+  const isZb = tag.grupa==='Збирен бренд';
+  const sub = isZb ? await sql(`select t.id,t.ime, extract(year from s.datum)::int y, extract(month from s.datum)::int m, sum(s.kolicina*c.cena_bez_ddv) v, sum(s.kolicina) kol
+      from tags t join article_tags at on at.tag_id=t.id join sales_daily s on s.sifra=at.sifra join article_cost c on c.sifra=s.sifra
+      where t.parent_id=${sel} group by 1,2,3,4 order by 2,3,4`) : [];
+  const inflow=await sql(`select a.sifra,a.ime,i.kol_odjava,i.kol_priem,i.vred_priem,c.cena_bez_ddv from brand_articles(${sel}) b join articles a on a.sifra=b.sifra left join article_inflow_year i on i.sifra=a.sifra and i.y=${Y} left join article_cost c on c.sifra=a.sifra where i.kol_odjava is not null or i.kol_priem is not null order by a.ime`);
+  const [lots,notes]=await Promise.all([sql(`select l.sifra,l.ime,l.rok,l.kolicina,l.dena_do_rok from lot_overview l join brand_articles(${sel}) b on b.sifra=l.sifra where l.kolicina>0 order by l.rok`),sql(`select id,datum,tekst from brand_notes where tag_id=${sel} order by datum desc, id desc`)]);
+  const cur=yrs.find(x=>x.y===Y), prev=yrs.find(x=>x.y===Y-1); const curYtd=ytd.find(x=>x.y===Y), prevYtd=ytd.find(x=>x.y===Y-1);
+  const target=tg?+tg.iznos:null; const curV=cur?+cur.v:0;
+  const by={}; mon.forEach(r=>by[r.y+'-'+r.m]=+r.v); const ys=[...new Set(mon.map(r=>+r.y))].sort();
+  const series=ys.slice(-3).map((y,i,arr)=>({name:String(y),cls:'b'+(arr.length-i),vals:Array.from({length:12},(_,m)=>by[y+'-'+(m+1)]||0)}));
+  const horizons=[['all','сите'],['1','1 месец'],['3','3 месеци'],['6','6 месеци'],['12','12 месеци'],['ny','до крај на следната година']];
+  const horOk=l=>{ const d=+l.dena_do_rok; if(BR.hor==='all') return true; if(BR.hor==='ny') return new Date(l.rok)<=new Date(Y+1,11,31); return d<=+BR.hor*30.5; };
+  const lotsF=lots.filter(horOk);
+  const prodTot=prods.reduce((a,p)=>({v2:a.v2+(+p.v2||0),v1:a.v1+(+p.v1||0),v0:a.v0+(+p.v0||0)}),{v2:0,v1:0,v0:0});
+  main.innerHTML=head+`
+    <h2>${esc(tag.grupa)}: ${esc(tag.ime)}</h2>
+    <p class="hint" style="margin:-6px 0 10px">${meta.n} артикли · набавни цени без ДДВ: ${meta.so_vlez} од влезови, ${meta.n-meta.so_vlez} проценети од продажна без ДДВ (додека нема приемен лист)</p>
+    <div class="tiles">
+      <div class="tile"><div class="l">Промет ${Y} (набавна, без ДДВ)</div><div class="v">${fmt(curV)}<small>ден.</small></div><div class="hint">${prevYtd?'ист период '+(Y-1)+': '+fmt(prevYtd.vred)+' · '+pct2(+curYtd?.vred||0,+prevYtd.vred):''}</div></div>
+      <div class="tile"><div class="l">Промет ${Y-1}</div><div class="v">${prev?fmt(prev.v):'—'}</div><div class="hint">${yrs.find(x=>x.y===Y-2)?(Y-2)+': '+fmt(yrs.find(x=>x.y===Y-2).v):''}</div></div>
+      <div class="tile${target&&curV>=target?' good':target?' warn':''}"><div class="l">Таргет ${Y}</div><div class="v">${target?fmt1(curV/target*100)+'<small>%</small>':'—'}</div><div class="hint">${target?fmt(curV)+' од '+fmt(target)+(curV<target?' · недостигаат '+fmt(target-curV):' · надминат'):'нема поставен таргет'}</div></div>
+      <div class="tile"><div class="l">Залиха (набавна вредност)</div><div class="v">${fmt(meta.zaliha_vred)}</div><div class="hint">${lots.length} активни серии со рок</div></div>
+    </div>
+    <h2>Излез (парчиња)</h2>
+    <div class="tiles">
+      <div class="tile"><div class="l">${Y} до ${esc(last.slice(8))}.${esc(last.slice(5,7))}.</div><div class="v">${fmt(cur?cur.kol:0)}<small>парч.</small></div><div class="hint">${prevYtd?'ист период '+(Y-1)+': '+fmt(prevYtd.kol)+' · '+pct2(+(curYtd?.kol||0),+prevYtd.kol):''}</div></div>
+      <div class="tile"><div class="l">${Y-1} цела година</div><div class="v">${fmt(prev?prev.kol:0)}<small>парч.</small></div></div>
+      <div class="tile"><div class="l">${Y-2} цела година</div><div class="v">${fmt(yrs.find(x=>x.y===Y-2)?.kol||0)}<small>парч.</small></div></div>
+      <div class="tile"><div class="l">Последни 30 / 90 дена</div><div class="v">${fmt(meta.p30)}<small>/ ${fmt(meta.p90)} парч.</small></div><div class="hint">лани: ${fmt(meta.p30l)} / ${fmt(meta.p90l)}</div></div>
+    </div>
+    <div class="inline" style="margin:10px 0"><span class="hint">Таргет за ${Y} (ден., набавна без ДДВ):</span><input id="btarget" type="number" style="width:160px" value="${target??''}"><button class="btn sec" id="btsave">Зачувај</button><span id="btmsg"></span></div>
+    <h2>Промет по месец, по години</h2><div class="card">${ys.length?groupChart(MES,series)+`<div class="legend">${series.map(s=>`<span><i style="background:var(--${s.cls==='b1'?'y1':s.cls==='b2'?'y2':'y3'})"></i>${s.name}</span>`).join('')}</div>`:'<div class="empty">Нема продажба</div>'}</div>
+    ${isZb && sub.length ? subBrandCharts(sub, ys.slice(-3), Y) : ''}
+    <div class="row">
+      <div><h2>Рокови</h2><div class="card">
+        <div class="inline" style="margin-bottom:8px">${horizons.map(([k,l])=>`<button class="tab${BR.hor===k?' on':''}" data-hor="${k}">${l}</button>`).join('')}</div>
+        <div class="twrap"><table><tr><th>Рок</th><th>Артикл</th><th class="n">Кол.</th><th class="n">Дена</th></tr>
+        ${lotsF.length?lotsF.map(l=>`<tr${+l.dena_do_rok<=90?' style="color:var(--bad)"':''}><td>${rokFmt(l.rok)}</td><td><a class="art" href="#a${l.sifra}">${esc(l.ime)}</a></td><td class="n">${fmt1(l.kolicina)}</td><td class="n">${fmt(l.dena_do_rok)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Нема серии во избраниот период</td></tr>'}</table></div></div></div>
+      <div><h2>Забелешки од состаноци и договори</h2><div class="card">
+        <textarea id="bnote" placeholder="Датум, со кого, што е договорено (рабат, акции, рокови на плаќање…)"></textarea>
+        <div class="inline" style="margin-top:8px"><input type="date" id="bndate" value="${new Date().toISOString().slice(0,10)}"><button class="btn" id="bnsave">Додај забелешка</button><span id="bnmsg"></span></div>
+        <div style="margin-top:12px">${notes.length?notes.map(n=>`<div style="border-top:1px solid var(--line);padding:8px 0"><div class="hint">${esc(n.datum)}</div><div class="note">${esc(n.tekst)}</div></div>`).join(''):'<div class="hint">Нема забелешки</div>'}</div></div></div>
+    </div>
+    <h2>Производи (${prods.length})</h2>
+    <div class="inline" style="margin-bottom:8px"><button class="tab${BR.mode!=='v'?' on':''}" data-mode="k">Продадени парчиња</button><button class="tab${BR.mode==='v'?' on':''}" data-mode="v">Вредност (набавна без ДДВ)</button></div>
+    <div class="card twrap"><table><tr><th>Артикл</th><th class="n">${Y-2}</th><th class="n">${Y-1}</th><th class="n">${Y}</th><th class="n">${Y} vs ${Y-1}</th><th class="n">Залиха</th></tr>
+      ${prods.map(p=>{const m=BR.mode==='v'; const a2=m?p.v2:p.k2, a1=m?p.v1:p.k1, a0=m?p.v0:p.k0; return `<tr><td><a class="art" href="#a${p.sifra}">${esc(p.ime)}</a></td><td class="n">${a2?fmt(a2):'·'}</td><td class="n">${a1?fmt(a1):'·'}</td><td class="n">${a0?fmt(a0):'·'}</td><td class="n">${a1&&a0?pct2(+a0,+a1):'—'}</td><td class="n">${fmt(p.zaliha)}</td></tr>`;}).join('')}
+      ${(()=>{const m=BR.mode==='v'; const t=prods.reduce((a,p)=>({a2:a.a2+(+(m?p.v2:p.k2)||0),a1:a.a1+(+(m?p.v1:p.k1)||0),a0:a.a0+(+(m?p.v0:p.k0)||0)}),{a2:0,a1:0,a0:0}); return `<tr><td><b>Вкупно</b></td><td class="n"><b>${fmt(t.a2)}</b></td><td class="n"><b>${fmt(t.a1)}</b></td><td class="n"><b>${fmt(t.a0)}</b></td><td class="n">${t.a1?pct2(t.a0,t.a1):'—'}</td><td></td></tr>`;})()}
+    </table></div>`;
+  main.innerHTML+=`<h2>Влез ${Y} по артикл — парчиња и набавна вредност без ДДВ</h2>
+    <p class="hint" style="margin:-6px 0 10px">Парчињата се од дневните ODJAVA извештаи (од 22.10.2026); вредноста од приемните листови (PDF) — каде нема приемен лист, е проценета: парчиња × набавна цена без ДДВ, означено со *.</p>
+    <div class="card twrap"><table><tr><th>Артикл</th><th class="n">Влез (парч.)</th><th class="n">Наб. вредност без ДДВ</th></tr>
+      ${inflow.length?inflow.map(r=>{const k=+(r.kol_odjava??r.kol_priem??0); const v=r.vred_priem!=null?+r.vred_priem:k*(+r.cena_bez_ddv||0); return `<tr><td><a class="art" href="#a${r.sifra}">${esc(r.ime)}</a> <span class="code">${r.sifra}</span></td><td class="n">${fmt1(k)}</td><td class="n">${fmt(v)}${r.vred_priem!=null?'':'<span class="code">*</span>'}</td></tr>`;}).join(''):'<tr><td colspan="3" class="empty">Нема влезови во '+Y+' (од 22.10 наваму)</td></tr>'}
+      ${inflow.length?`<tr><td><b>Вкупно</b></td><td class="n"><b>${fmt1(inflow.reduce((a,r)=>a+ +(r.kol_odjava??r.kol_priem??0),0))}</b></td><td class="n"><b>${fmt(inflow.reduce((a,r)=>a+(r.vred_priem!=null?+r.vred_priem:+(r.kol_odjava??r.kol_priem??0)*(+r.cena_bez_ddv||0)),0))}</b></td></tr>`:''}</table></div>`;
+  wireBrandSel();
+  main.querySelectorAll('[data-hor]').forEach(b=>b.onclick=()=>{ BR.hor=b.dataset.hor; viewBrendovi(); });
+  main.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{ BR.mode=b.dataset.mode; viewBrendovi(); });
+  document.getElementById('btsave').onclick=async()=>{ const v=document.getElementById('btarget').value; try{ await sql(v===''?`delete from brand_targets where tag_id=${sel} and godina=${Y}`:`insert into brand_targets(tag_id,godina,iznos) values (${sel},${Y},${+v}) on conflict (tag_id,godina) do update set iznos=excluded.iznos`); viewBrendovi(); }catch(e){ toast(document.getElementById('btmsg'),e.message,true); } };
+  document.getElementById('bnsave').onclick=async()=>{ const t=document.getElementById('bnote').value.trim(); if(!t) return; try{ await sql(`insert into brand_notes(tag_id,datum,tekst) values (${sel},'${document.getElementById('bndate').value}','${sq(t)}')`); viewBrendovi(); }catch(e){ toast(document.getElementById('bnmsg'),e.message,true); } };
+}
+function subBrandCharts(rows, years, Y){
+  const byB={}; rows.forEach(r=>{ (byB[r.id] ??= {ime:r.ime, by:{}, tot:{}}).by[r.y+'-'+r.m]=+r.v; byB[r.id].tot[r.y]=(byB[r.id].tot[r.y]||0)+ +r.v; });
+  const list=Object.entries(byB).sort((a,b)=>(b[1].tot[Y]||0)-(a[1].tot[Y]||0));
+  return `<h2>Подбрендови (${list.length}) — промет по месец, подредени по ${Y}</h2>
+    <div class="subgrid">${list.map(([id,b])=>{
+      const series=years.map((y,i,arr)=>({name:String(y),cls:'b'+(arr.length-i),vals:Array.from({length:12},(_,m)=>b.by[y+'-'+(m+1)]||0)}));
+      return `<div class="card"><div class="inline" style="justify-content:space-between;align-items:baseline"><b><a class="art" href="#brendovi" data-pick="${id}">${esc(b.ime)}</a></b>
+        <span class="hint">${years.map(y=>`${y}: <b>${fmt(b.tot[y]||0)}</b>`).join(' · ')}${b.tot[Y-1]?' · '+pct2(b.tot[Y]||0,b.tot[Y-1]):''}</span></div>
+        ${groupChart(MES,series,130)}</div>`; }).join('')}</div>`;
+}
+function wireBrandSel(){
+  document.querySelectorAll('[data-pick]').forEach(a=>a.onclick=()=>{ BR.br=a.dataset.pick; viewBrendovi(); });
+  document.getElementById('selzb').onchange=e=>{ BR.zb=e.target.value; BR.br=''; viewBrendovi(); };
+  document.getElementById('selbr').onchange=e=>{ BR.br=e.target.value; viewBrendovi(); };
+}
+
+async function viewArtikal(sifra){
+  if(!/^\d{6,7}$/.test(sifra)) return viewArtikli('');
+  main.innerHTML='<div class="empty">Вчитувам артикл…</div>';
+  await loadTags();
+  const [a]=await sql(`select o.*, a.zabeleska, a.zabeleska_datum from article_ov o join articles a on a.sifra=o.sifra where o.sifra='${sifra}'`);
+  if(!a){ main.innerHTML='<div class="empty">Артиклот не постои</div>'; return; }
+  const [mytags,yoy,dni,hist]=await Promise.all([sql(`select t.id,t.ime,g.ime grupa from article_tags at join tags t on t.id=at.tag_id join tag_groups g on g.id=t.group_id where at.sifra='${sifra}' order by g.redosled,g.ime,t.ime`),sql(`select extract(year from datum)::int y, extract(month from datum)::int m, sum(kolicina) kol from sales_daily where sifra='${sifra}' group by 1,2 order by 1,2`),sql(`select datum, kolicina kol from sales_daily where sifra='${sifra}' and datum> (select max(datum) from sales_daily)-90 order by 1`),sql(`select datum, kolicina from stock_snapshots where sifra='${sifra}' order by 1 desc limit 30`)]);
+  const [cmp]=await sql(`with d as (select max(datum) d from sales_daily) select
+    (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-30) t30,
+    (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-30-interval '1 year' and datum<= d-interval '1 year') l30,
+    (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-90) t90,
+    (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-90-interval '1 year' and datum<= d-interval '1 year') l90`);
+  const nab=await sql(`select r.datum,r.broj,r.br_faktura,s.ime dobavuvac,s.id sid,ri.kol,ri.nab_cena,round(ri.nab_cena*(1+coalesce(ri.ddv_stapka,0)/100),2) so_ddv,ri.prod_cena from receipt_items ri join receipts r on r.id=ri.receipt_id left join suppliers s on s.id=r.supplier_id where ri.sifra='${sifra}' order by r.datum desc, r.id desc limit 40`);
+  const last=nab[0];
+  const [lots,pendA,[lstate]]=await Promise.all([sql(`select * from lot_overview where sifra='${sifra}' and status='aktivna' order by rok`),sql(`select id,kolicina,datum from lot_pending where sifra='${sifra}' and status='ceka' order by datum`),sql(`select applied_through from lot_state where sifra='${sifra}'`)]);
+  const dnevno=(+a.prod_90)/90; const pokrie=dnevno>0?Math.round((+a.zaliha||0)/dnevno):null;
+  const per=[['7 дена',7],['30 дена',30],['90 дена',90],['6 мес.',182],['12 мес.',365]];
+  const Y=yoyTable(yoy);
+  const renderTags=()=>mytags.length?mytags.map(t=>`<span class="chip"><span class="g">${esc(t.grupa)}:</span> ${esc(t.ime)}<button title="Отстрани" data-del="${t.id}">×</button></span>`).join(''):'<span class="hint">Нема тагови</span>';
+  main.innerHTML=`
+    <a class="back" href="#artikli">← Артикли</a>
+    <h1 style="margin-top:6px">${esc(a.ime)}</h1>
+    <p class="sub"><span class="code">${a.sifra}</span>${a.aktiven?'':' <span class="chip bad">неактивен</span>'}</p>
+    <div class="tiles">
+      <div class="tile${+a.zaliha<0?' bad':''}"><div class="l">Залиха (${esc(a.zaliha_datum||'—')})</div><div class="v">${fmt1(a.zaliha)}<small>${esc(a.em||'')}</small></div></div>
+      <div class="tile"><div class="l">Продажна цена</div><div class="v">${fmt2(a.cena)}<small>ден.</small></div></div>
+      <div class="tile"><div class="l">Продадено 30 дена</div><div class="v">${fmt(cmp.t30)}</div><div class="hint">лани: ${fmt(cmp.l30)} · ${pct(+cmp.t30,+cmp.l30)}</div></div>
+      <div class="tile"><div class="l">Продадено 90 дена</div><div class="v">${fmt(cmp.t90)}</div><div class="hint">лани: ${fmt(cmp.l90)} · ${pct(+cmp.t90,+cmp.l90)}</div></div>
+      <div class="tile${pokrie!=null&&pokrie<14?' bad':''}"><div class="l">Залихата трае уште</div><div class="v">${pokrie==null?'—':fmt(pokrie)}<small>дена</small></div></div>
+      <div class="tile"><div class="l">Последна набавна (без / со ДДВ)</div><div class="v">${last?fmt2(last.nab_cena):'—'}<small>${last?'/ '+fmt2(last.so_ddv):''}</small></div><div class="hint">${last?esc(last.datum)+' · '+esc(last.dobavuvac||''):'нема увезени влезови'}</div></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div><h2>Тагови</h2><div class="card"><div id="mytags">${renderTags()}</div><div style="margin-top:10px">${tagPicker('artpick')}</div></div></div>
+      <div><h2>Забелешка</h2><div class="card"><textarea id="nota" placeholder="Слободен текст: договори, состојба, што да се внимава…">${esc(a.zabeleska||'')}</textarea>
+        <div class="inline" style="margin-top:8px"><button class="btn" id="savenota">Зачувај</button><span class="hint" id="notadate">${a.zabeleska_datum?'последна промена '+a.zabeleska_datum.slice(0,16).replace('T',' '):''}</span><span id="notamsg"></span></div></div></div>
+    </div>
+    <h2>Препорачана залиха (по просек од 90 дена: ${fmt1(dnevno)}/ден)</h2>
+    <div class="card"><div class="cover">${per.map(([l,d])=>{const need=Math.ceil(dnevno*d); const ok=(+a.zaliha||0)>=need; return `<div class="${ok?'ok':'low'}"><div class="l">${l}</div><div class="v">${fmt(need)}</div></div>`;}).join('')}</div>
+      <p class="hint" style="margin-top:10px">Зелено: моменталната залиха го покрива периодот. Црвено: недостига.</p></div>
+    <h2>Продажба по месец, по години (парчиња)</h2><div class="card">${Y.chart}<div class="twrap" style="margin-top:10px">${Y.table}</div></div>
+    <h2>Рокови (серии)</h2>${lotsSection(sifra,lots,pendA,lstate)}
+    <h2>Влезови (набавки)</h2><div class="card twrap"><table><tr><th>Датум</th><th>Добавувач</th><th>Приемен лист / фактура</th><th class="n">Кол.</th><th class="n">Наб. без ДДВ</th><th class="n">Наб. со ДДВ</th><th class="n">Прод. цена</th></tr>
+      ${nab.length?nab.map(r=>`<tr><td>${esc(r.datum)}</td><td>${r.sid?`<a class="art" href="#d${r.sid}">${esc(r.dobavuvac)}</a>`:'—'}</td><td><span class="code">${esc(r.broj)}${r.br_faktura?' · ф. '+esc(r.br_faktura):''}</span></td><td class="n">${fmt1(r.kol)}</td><td class="n">${fmt2(r.nab_cena)}</td><td class="n">${fmt2(r.so_ddv)}</td><td class="n">${fmt2(r.prod_cena)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Нема увезени влезови за овој артикл</td></tr>'}</table></div>
+    <div class="row">
+      <div><h2>Продажба по ден, последни 90 дена</h2><div class="card">${barChart(dni,d=>d.datum.slice(8)+'.'+d.datum.slice(5,7),d=>+d.kol)}</div></div>
+      <div><h2>Податоци</h2><div class="card"><div class="kv">
+          <b>ДДВ</b><span>${fmt(a.ddv)} %</span><b>Тарифа</b><span>${esc(a.tar||'—')}</span><b>Маржа</b><span>${a.marza!=null?fmt1(a.marza)+' %':'—'}</span>
+          <b>Ед. мера</b><span>${esc(a.em||'—')}</span><b>Последна продажба</b><span>${esc(a.posledna_prodazba||'—')}</span><b>Продадено 12 мес.</b><span>${fmt(a.prod_365)}</span>
+        </div></div>
+        <h2>Историја на залиха</h2><div class="card twrap"><table><tr><th>Датум</th><th class="n">Залиха</th></tr>${hist.map(h=>`<tr><td>${h.datum}</td><td class="n">${fmt1(h.kolicina)}</td></tr>`).join('')}</table></div></div>
+    </div>`;
+  wireLots(sifra, ()=>viewArtikal(sifra));
+  const tagsEl=document.getElementById('mytags');
+  const wireDel=()=>tagsEl.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{ b.disabled=true;
+    try{ await sql(`delete from article_tags where sifra='${sifra}' and tag_id=${+b.dataset.del}`); const i=mytags.findIndex(t=>String(t.id)===b.dataset.del); if(i>=0) mytags.splice(i,1); tagsEl.innerHTML=renderTags(); wireDel(); }
+    catch(e){ toast(document.querySelector('#artpick .msg'),e.message||e,true); b.disabled=false; } });
+  wireDel();
+  wirePicker(document.getElementById('artpick'), async(gid,gname,name)=>{
+    const tid=await ensureTag(gid,gname,name);
+    await sql(`insert into article_tags(sifra,tag_id) values ('${sifra}',${+tid}) on conflict do nothing`);
+    await loadTags(true); const t=TAGS.find(t=>String(t.id)===String(tid)); if(t&&!mytags.find(x=>String(x.id)===String(tid))) mytags.push({id:t.id,ime:t.ime,grupa:t.grupa});
+    tagsEl.innerHTML=renderTags(); wireDel(); toast(document.querySelector('#artpick .msg'),'Додадено');
+  });
+  document.getElementById('savenota').onclick=async()=>{ const b=document.getElementById('savenota'); b.disabled=true;
+    try{ const v=document.getElementById('nota').value.trim(); await sql(`update articles set zabeleska=${v?`'${sq(v)}'`:'null'}, zabeleska_datum=${v?'now()':'null'} where sifra='${sifra}'`);
+      document.getElementById('notadate').textContent=v?'последна промена сега':''; toast(document.getElementById('notamsg'),'Зачувано'); }
+    catch(e){ toast(document.getElementById('notamsg'),e.message||e,true); } b.disabled=false; };
+}
+
+/* ---------- router ---------- */
+function route(){
+  const h=(location.hash||'#pregled').slice(1);
+  document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.id==='n-'+h));
+  if(!mcp) return;
+  const run = /^a\d/.test(h) ? viewArtikal(h.slice(1)) : /^r\d+$/.test(h) ? viewPriem(h.slice(1)) : /^d\d+$/.test(h) ? viewDobavuvac(h.slice(1)) : h==='artikli' ? viewArtikli(q.value) : h==='tagovi' ? viewTagovi() : h==='vlezovi' ? viewVlezovi() : h==='naracki' ? viewNaracki() : /^o\d+$/.test(h) ? viewNaracka(h.slice(1)) : /^oc\d+_/.test(h) ? viewCheck(h) : h==='rokovi' ? viewProverki() : h==='brendovi' ? viewBrendovi() : viewPregled();
+  run.catch(fail);
+}
+let t; q.addEventListener('input',()=>{ if(window.AF) window.AF.page=0; clearTimeout(t); t=setTimeout(()=>{ if(location.hash!=='#artikli') location.hash='artikli'; else route(); },350);});
+q.addEventListener('keydown',e=>{ if(e.key==='Enter'){ clearTimeout(t); location.hash==='#artikli'?route():location.hash='artikli'; }});
+window.addEventListener('hashchange',route);
+function dl(filename,data){ const u=URL.createObjectURL(data); const a=document.createElement('a'); a.href=u; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),5000); }
+/* ---------- најава ---------- */
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const login=document.getElementById('login'), lmsg=document.getElementById('lmsg');
+function showLogin(msg){ mcp=null; login.hidden=false; document.body.classList.add('auth'); main.innerHTML=''; if(msg) lmsg.innerHTML=`<span class="down">${esc(msg)}</span>`; }
+function showApp(user){ mcp=true; login.hidden=true; document.body.classList.remove('auth'); document.getElementById('who').textContent=user.email; route(); }
+document.getElementById('lform').onsubmit=async e=>{ e.preventDefault(); const email=document.getElementById('lemail').value.trim(), pass=document.getElementById('lpass').value; lmsg.textContent='Се најавувам…';
+  const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+  if(error){ lmsg.innerHTML=`<span class="down">${esc(error.message==='Invalid login credentials'?'Погрешна е-пошта или лозинка':error.message)}</span>`; return; }
+  showApp(data.user); };
+document.getElementById('lreg').onclick=async()=>{ const email=document.getElementById('lemail').value.trim(), pass=document.getElementById('lpass').value; if(!email||pass.length<6){ lmsg.innerHTML='<span class="down">Внеси е-пошта и лозинка (најмалку 6 знаци)</span>'; return; } lmsg.textContent='Правам налог…';
+  const {data,error}=await sb.auth.signUp({email,password:pass});
+  if(error){ lmsg.innerHTML=`<span class="down">${esc(error.message)}</span>`; return; }
+  if(data.session) showApp(data.user); else lmsg.innerHTML='<span class="up">Налогот е направен. Провери ја е-поштата и кликни на линкот за потврда, па најави се.</span>'; };
+document.getElementById('logout').onclick=async()=>{ await sb.auth.signOut(); showLogin(); };
+(async()=>{
+  const {data}=await sb.auth.getSession();
+  if(data.session) showApp(data.session.user); else showLogin();
+  sb.auth.onAuthStateChange((ev,s)=>{ if(ev==='SIGNED_OUT') showLogin(); });
+})();
+</script>
+</body>
+</html>
