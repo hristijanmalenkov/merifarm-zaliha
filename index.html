@@ -123,7 +123,7 @@ body.auth header,body.auth main{display:none}
 <header><div class="hwrap">
   <div class="brand">Merifarm<small>залиха</small></div>
   <input id="q" type="search" placeholder="Пребарај артикл по име или шифра…" autocomplete="off">
-  <nav><a href="#pregled" id="n-pregled">Преглед</a><a href="#artikli" id="n-artikli">Артикли</a><a href="#vlezovi" id="n-vlezovi">Влезови</a><a href="#naracki" id="n-naracki">Нарачки</a><a href="#rokovi" id="n-rokovi">Рокови</a><a href="#brendovi" id="n-brendovi">Брендови</a><a href="#tagovi" id="n-tagovi">Тагови</a></nav><span class="hint" id="who" style="margin-left:auto"></span><button class="btn sec" id="logout" style="padding:6px 10px">Одјава</button>
+  <nav><a href="#pregled" id="n-pregled">Преглед</a><a href="#artikli" id="n-artikli">Артикли</a><a href="#vlezovi" id="n-vlezovi">Влезови</a><a href="#naracki" id="n-naracki">Нарачки</a><a href="#rokovi" id="n-rokovi">Рокови</a><a href="#brendovi" id="n-brendovi">Брендови</a><a href="#tagovi" id="n-tagovi">Тагови</a></nav><a class="hint" id="who" href="#najavi" style="margin-left:auto;text-decoration:none" title="Последни најави"></a><button class="btn sec" id="logout" style="padding:6px 10px">Одјава</button>
 </div></header>
 <div id="login" hidden><form id="lform" class="card"><h1>Merifarm Залиха</h1><p class="sub">Најави се за да продолжиш</p>
   <label class="hint">Е-пошта</label><input id="lemail" type="email" autocomplete="username" required style="width:100%;margin:4px 0 10px">
@@ -845,12 +845,26 @@ async function viewArtikal(sifra){
     catch(e){ toast(document.getElementById('notamsg'),e.message||e,true); } b.disabled=false; };
 }
 
+/* ---------- најави (безбедност) ---------- */
+async function viewNajavi(){
+  main.innerHTML='<div class="empty">Вчитувам…</div>';
+  const [rows,users]=await Promise.all([sql(`select email, to_char(at at time zone 'Europe/Skopje','DD.MM.YYYY HH24:MI') koga, user_agent ua, ip from app_logins order by at desc limit 50`), sql(`select email, ime from app_users order by email`)]);
+  const dev=ua=>{ ua=ua||''; const os=/iPhone|iPad/.test(ua)?'iPhone/iPad':/Android/.test(ua)?'Android':/Windows/.test(ua)?'Windows':/Mac/.test(ua)?'Mac':'?'; const br=/Edg\//.test(ua)?'Edge':/Chrome\//.test(ua)?'Chrome':/Safari\//.test(ua)?'Safari':/Firefox\//.test(ua)?'Firefox':'?'; return os+' · '+br; };
+  main.innerHTML=`<h1>Најави и безбедност</h1>
+    <div class="tiles"><div class="tile"><div class="l">Дозволени корисници</div><div class="v" style="font-size:16px">${users.map(u=>esc(u.email)).join('<br>')}</div><div class="hint">Само овие е-пошти можат да направат налог и да гледаат податоци.</div></div>
+      <div class="tile"><div class="l">Најави (последни 50)</div><div class="v">${rows.length}</div></div></div>
+    <div class="inline" style="margin:12px 0"><button class="btn sec" id="outall">Одјави ме од сите уреди</button><span class="hint">Ако мислиш дека некој друг ја отворил страната на твој уред, кликни тука и смени лозинка.</span></div>
+    <div class="card twrap"><table><tr><th>Кога</th><th>Кој</th><th>Уред</th><th>IP</th></tr>
+      ${rows.length?rows.map(r=>`<tr><td>${esc(r.koga)}</td><td>${esc(r.email)}</td><td>${esc(dev(r.ua))}<div class="code">${esc((r.ua||'').slice(0,80))}</div></td><td class="code">${esc(r.ip||'')}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Уште нема запишани најави</td></tr>'}</table></div>
+    <p class="hint">Секоја успешна најава се запишува. Ако видиш најава што не е твоја (непознат уред, време кога не си работел), одјави се од сите уреди и смени ја лозинката.</p>`;
+  document.getElementById('outall').onclick=async()=>{ await sb.auth.signOut({scope:'global'}); showLogin('Одјавен си од сите уреди.'); };
+}
 /* ---------- router ---------- */
 function route(){
   const h=(location.hash||'#pregled').slice(1);
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.id==='n-'+h));
   if(!mcp) return;
-  const run = /^a\d/.test(h) ? viewArtikal(h.slice(1)) : /^r\d+$/.test(h) ? viewPriem(h.slice(1)) : /^d\d+$/.test(h) ? viewDobavuvac(h.slice(1)) : h==='artikli' ? viewArtikli(q.value) : h==='tagovi' ? viewTagovi() : h==='vlezovi' ? viewVlezovi() : h==='naracki' ? viewNaracki() : /^o\d+$/.test(h) ? viewNaracka(h.slice(1)) : /^oc\d+_/.test(h) ? viewCheck(h) : h==='rokovi' ? viewProverki() : h==='brendovi' ? viewBrendovi() : viewPregled();
+  const run = /^a\d/.test(h) ? viewArtikal(h.slice(1)) : /^r\d+$/.test(h) ? viewPriem(h.slice(1)) : /^d\d+$/.test(h) ? viewDobavuvac(h.slice(1)) : h==='artikli' ? viewArtikli(q.value) : h==='tagovi' ? viewTagovi() : h==='vlezovi' ? viewVlezovi() : h==='naracki' ? viewNaracki() : /^o\d+$/.test(h) ? viewNaracka(h.slice(1)) : /^oc\d+_/.test(h) ? viewCheck(h) : h==='rokovi' ? viewProverki() : h==='brendovi' ? viewBrendovi() : h==='najavi' ? viewNajavi() : viewPregled();
   run.catch(fail);
 }
 let t; q.addEventListener('input',()=>{ if(window.AF) window.AF.page=0; clearTimeout(t); t=setTimeout(()=>{ if(location.hash!=='#artikli') location.hash='artikli'; else route(); },350);});
@@ -861,15 +875,17 @@ function dl(filename,data){ const u=URL.createObjectURL(data); const a=document.
 const sb=supabase.createClient(SB_URL,SB_KEY);
 const login=document.getElementById('login'), lmsg=document.getElementById('lmsg');
 function showLogin(msg){ mcp=null; login.hidden=false; document.body.classList.add('auth'); main.innerHTML=''; if(msg) lmsg.innerHTML=`<span class="down">${esc(msg)}</span>`; }
-function showApp(user){ mcp=true; login.hidden=true; document.body.classList.remove('auth'); document.getElementById('who').textContent=user.email; route(); }
+function showApp(user,fresh){ mcp=true; login.hidden=true; document.body.classList.remove('auth'); document.getElementById('who').textContent=user.email;
+  if(fresh) sb.rpc('app_login_log',{p_ua:navigator.userAgent}).catch(()=>{});
+  route(); }
 document.getElementById('lform').onsubmit=async e=>{ e.preventDefault(); const email=document.getElementById('lemail').value.trim(), pass=document.getElementById('lpass').value; lmsg.textContent='Се најавувам…';
   const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
   if(error){ lmsg.innerHTML=`<span class="down">${esc(error.message==='Invalid login credentials'?'Погрешна е-пошта или лозинка':error.message)}</span>`; return; }
-  showApp(data.user); };
+  showApp(data.user,true); };
 document.getElementById('lreg').onclick=async()=>{ const email=document.getElementById('lemail').value.trim(), pass=document.getElementById('lpass').value; if(!email||pass.length<6){ lmsg.innerHTML='<span class="down">Внеси е-пошта и лозинка (најмалку 6 знаци)</span>'; return; } lmsg.textContent='Правам налог…';
   const {data,error}=await sb.auth.signUp({email,password:pass});
   if(error){ lmsg.innerHTML=`<span class="down">${esc(error.message)}</span>`; return; }
-  if(data.session) showApp(data.user); else lmsg.innerHTML='<span class="up">Налогот е направен. Провери ја е-поштата и кликни на линкот за потврда, па најави се.</span>'; };
+  if(data.session) showApp(data.user,true); else lmsg.innerHTML='<span class="up">Налогот е направен. Провери ја е-поштата и кликни на линкот за потврда, па најави се.</span>'; };
 document.getElementById('logout').onclick=async()=>{ await sb.auth.signOut(); showLogin(); };
 (async()=>{
   const {data}=await sb.auth.getSession();
