@@ -548,12 +548,18 @@ async function viewDobavuvac(id){
 }
 
 /* ---------- Нарачки (потврдени) ---------- */
+let NKALL=false;
 async function viewNaracki(){
   main.innerHTML='<div class="empty">Вчитувам нарачки…</div>';
-  const rows=await sql(`select o.id,o.datum,o.naziv,o.do_datum,o.status,o.parent_id,(select count(*) from order_items i where i.order_id=o.id) n,(select count(*) filter (where status='ima') from order_items i where i.order_id=o.id) ima,(select count(*) filter (where status='nema') from order_items i where i.order_id=o.id) nema,(select count(distinct coalesce(dobavuvac,'')) from order_items i where i.order_id=o.id) dob from orders o order by o.datum desc, o.id desc`);
-  main.innerHTML=`<h1>Нарачки</h1><p class="sub">Потврдени нарачки по датум · клик за работа по добавувачи</p>
+  const allrows=await sql(`select o.id,o.datum,o.naziv,o.do_datum,o.status,o.parent_id,(select count(*) from order_items i where i.order_id=o.id) n,(select count(*) filter (where status='ima') from order_items i where i.order_id=o.id) ima,(select count(*) filter (where status='nema') from order_items i where i.order_id=o.id) nema,(select count(distinct coalesce(dobavuvac,'')) from order_items i where i.order_id=o.id) dob from orders o order by o.datum desc, o.id desc`);
+  const done=r=>+r.n>0 && +r.ima + +r.nema === +r.n;
+  const rows=NKALL?allrows:allrows.filter(r=>!done(r)); const nDone=allrows.filter(done).length;
+  main.innerHTML=`<h1>Нарачки</h1><p class="sub">${NKALL?'Сите нарачки':'Активни нарачки (во тек)'} · клик за работа по добавувачи</p>
+    <div class="inline" style="margin-bottom:10px"><button class="tab${!NKALL?' on':''}" id="nk-akt">Активни (${allrows.length-nDone})</button><button class="tab${NKALL?' on':''}" id="nk-site">Сите (${allrows.length})</button></div>
     <div class="card twrap"><table><tr><th>Датум</th><th>Нарачка</th><th class="n">Артикли</th><th class="n">Добавувачи</th><th class="n">Има</th><th class="n">Нема</th><th>Статус</th></tr>
-    ${rows.length?rows.map(r=>`<tr><td>${esc(r.datum)}</td><td><a class="art" href="#o${r.id}">${esc(r.naziv)}</a>${r.do_datum?'<div class="code">роба до '+esc(r.do_datum)+'</div>':''}</td><td class="n">${r.n}</td><td class="n">${r.dob}</td><td class="n up">${r.ima}</td><td class="n down">${r.nema}</td><td>${r.n>0&&+r.ima+ +r.nema===+r.n?'<span class="chip">завршена</span>':'<span class="chip bad" style="background:var(--accent-soft);color:var(--accent)">во тек</span>'}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Нема потврдени нарачки. Направи ја од Преглед → Нарачка → „Потврди нарачка“.</td></tr>'}</table></div>`;
+    ${rows.length?rows.map(r=>`<tr><td>${esc(r.datum)}</td><td><a class="art" href="#o${r.id}">${esc(r.naziv)}</a>${r.do_datum?'<div class="code">роба до '+esc(r.do_datum)+'</div>':''}</td><td class="n">${r.n}</td><td class="n">${r.dob}</td><td class="n up">${r.ima}</td><td class="n down">${r.nema}</td><td>${r.n>0&&+r.ima+ +r.nema===+r.n?'<span class="chip">завршена</span>':'<span class="chip bad" style="background:var(--accent-soft);color:var(--accent)">во тек</span>'}</td></tr>`).join(''):`<tr><td colspan="7" class="empty">${NKALL?'Нема потврдени нарачки. Направи ја од Преглед → Нарачка → „Потврди нарачка“.':'Нема активни нарачки — сите се завршени.'}</td></tr>`}</table></div>`;
+  document.getElementById('nk-akt').onclick=()=>{ NKALL=false; viewNaracki(); };
+  document.getElementById('nk-site').onclick=()=>{ NKALL=true; viewNaracki(); };
 }
 async function viewNaracka(id){
   main.innerHTML='<div class="empty">Вчитувам нарачка…</div>';
