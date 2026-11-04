@@ -347,8 +347,12 @@ async function loadNaracka(){
   if(!NR.od){ const d=new Date(last); d.setDate(d.getDate()-30); NR.od=d.toISOString().slice(0,10); }
   const days=Math.max(1,Math.round((new Date(NR.do)-new Date(last))/86400000));
   let [meta]=await sql(`select info from order_model_meta where id=1`);
-  if(!meta || !meta.info || meta.info.do!==NR.do || meta.info.last!==last){ box.innerHTML='<div class="empty">Пресметувам модел (тренд, сезона, сигурносна залиха)…</div>'; const [m]=await sql(`select order_model_refresh('${NR.do}') info`); meta={info:m.info}; }
-  const MI=meta.info;
+  let stale = !meta || !meta.info || !meta.info.last || meta.info.last!==last;
+  if(stale){ // моделот е застарен — побарај пресметка во заднина (трае ~1 мин) и покажи го стариот
+    try{ await sql(`select order_model_schedule()`); }catch(e){}
+    if(!meta||!meta.info||!meta.info.last){ box.innerHTML='<div class="empty">Моделот се пресметува во заднина (околу 1 минута). Освежи ја страницата потоа.</div>'; return; }
+  }
+  const MI=Object.assign({},meta.info); if(MI.do!==NR.do){ MI.model_total=null; MI.lani_tempo_total=null; }
   const [dobs,[cnt],rows]=await Promise.all([
     sql(`select d from (select dobavuvac_sw d from articles where dobavuvac_sw is not null union select dobavuvac from order_lines where dobavuvac is not null union select ime from suppliers) x group by 1 order by 1`),
     sql(`select count(*) n from articles where aktiven and ime not like '%(неактивен)'`),
@@ -356,8 +360,8 @@ async function loadNaracka(){
         coalesce((select sum(kolicina) from sales_daily s where s.sifra=a.sifra and s.datum>='${NR.od}'),0) period,
         case when coalesce(st.prod_90,0)>0 then st.prod_90/90.0 when coalesce(st.prod_365,0)>0 then st.prod_365/365.0 else 0 end rate,
         ol.kolicina moja, ol.dobavuvac moj_dob,
-        m.predlog, m.demand, m.safety, m.f, m.own_f, m.g_f, m.w, m.trend30, m.yoy, m.s30, m.s90, m.s_prev60, m.lani90, m.lani_t, m.spike, m.flags, m.rate mrate
-      from articles a join article_stats st on st.sifra=a.sifra left join article_cost c on c.sifra=a.sifra left join order_lines ol on ol.sifra=a.sifra left join order_model m on m.sifra=a.sifra
+        v.predlog, v.demand, v.safety, m.f, m.own_f, m.g_f, m.w, m.trend30, m.yoy, m.s30, m.s90, m.s_prev60, m.lani90, m.lani_t, m.spike, m.flags, m.rate mrate
+      from articles a join article_stats st on st.sifra=a.sifra left join article_cost c on c.sifra=a.sifra left join order_lines ol on ol.sifra=a.sifra left join order_model m on m.sifra=a.sifra left join order_model_view('${NR.do}') v on v.sifra=a.sifra
       where a.aktiven and a.ime not like '%(неактивен)' order by a.ime limit ${NPAGE} offset ${NR.page*NPAGE})
       select * from r`)]);
   const FL={pad:['▼ пад','bad','последни 30 дена ≥30% под претходните 60'],rast:['▲ раст','good','последни 30 дена ≥30% над претходните 60'],lani_pad:['лани ↓','bad','90 дена ≥30% под истиот период лани'],lani_rast:['лани ↑','good','90 дена ≥30% над истиот период лани'],novo:['ново','','нов артикл — нема споредба со лани'],spike:['еднократно','warn','еден ден носи >40% од продажбата — тој ден е изземен од просекот'],sezonski:['сезонски','warn','сопствен сезонски фактор значајно различен од глобалниот'],minus:['минус','bad','залихата е негативна — се смета како 0']};
@@ -366,6 +370,7 @@ async function loadNaracka(){
   const expl=r=>`${fmt1(+r.mrate)}/ден × сезона ${fmt1(+r.f*100)/100} × ${days} д. = ${fmt1(r.demand)} + сигурност ${fmt1(r.safety)} − залиха ${fmt1(Math.max(0,+r.zaliha))} → ${fmt(r.predlog)}`;
   const cls=r=>{ const z=+r.zaliha, per=+r.period, rate=+(r.mrate??r.rate)*+(r.f||1), need=+(r.demand||0);
     if(per>z) return 'c-orange'; if(rate>0 && z<rate*30) return 'c-red'; if(need>z && z>per) return 'c-yellow'; return ''; };
+  if(MI.model_total==null){ try{ const [t]=await sql(`select round(sum(demand)) d from order_model_view('${NR.do}')`); MI.model_total=t.d; }catch(e){} }
   const dif=MI.lani_tempo_total?(+MI.model_total/+MI.lani_tempo_total-1):null;
   const pages=Math.ceil(cnt.n/NPAGE);
   box.innerHTML=`<div class="card" style="margin-bottom:12px"><div class="inline">
@@ -373,7 +378,7 @@ async function loadNaracka(){
       <span class="hint" style="margin-left:10px">Роба до датум:</span><input type="date" id="nrdo" value="${NR.do}"><span class="hint">(${days} дена)</span>
       <button class="btn" id="nrgo">Пресметај</button><button class="btn sec" id="nrpdf">PDF на нарачката</button><button class="btn" id="nrok" style="background:var(--good)">Потврди нарачка</button><span id="nrmsg" class="hint"></span></div>
     <div class="inline hint" style="margin-top:8px;gap:14px"><span><i class="sw c-orange"></i> продажба во периодот поголема од залихата</span><span><i class="sw c-red"></i> залиха под 30 дена</span><span><i class="sw c-yellow"></i> треба нарачка до датумот, но залихата е над продажбата во периодот</span><span>Предлог = дневно (90 д., без еднократни излези) × сезонски фактор × ${days} д. + сигурносна залиха (1,28·σ·√д.) − залиха. Во „Нарачај“ стои 0 — се нарачува само она каде ќе внесеш количина. Се чува автоматски.</span></div>
-    <div class="inline hint" style="margin-top:8px;gap:14px"><span><b>Модел за ${days} д.:</b> ${fmt(MI.model_total)} парч.</span><span><b>Лани ист период × темпо:</b> ${fmt(MI.lani_tempo_total)} парч. (темпо ${MI.tempo>=1?'+':''}${fmt1((MI.tempo-1)*100)}% vs лани)</span><span><b>Разлика:</b> ${dif==null?'—':`<span class="${Math.abs(dif)<0.05?'up':'down'}">${dif>=0?'+':''}${fmt1(dif*100)}%</span>`}</span><span><b>Сезонски фактор:</b> ${fmt1(MI.gf*100)/100} (${MI.gf1??'·'} / ${MI.gf2??'·'} по години)</span><span><b>Тренд</b> = последни 30 д. vs претходни 60 · <b>Лани</b> = 90 д. vs ист период лани</span></div></div>
+    <div class="inline hint" style="margin-top:8px;gap:14px"><span><b>Модел за ${days} д.:</b> ${fmt(MI.model_total)} парч.</span>${MI.lani_tempo_total!=null?`<span><b>Лани ист период × темпо:</b> ${fmt(MI.lani_tempo_total)} парч. (темпо ${MI.tempo>=1?'+':''}${fmt1((MI.tempo-1)*100)}% vs лани)</span><span><b>Разлика:</b> ${dif==null?'—':`<span class="${Math.abs(dif)<0.05?'up':'down'}">${dif>=0?'+':''}${fmt1(dif*100)}%</span>`}</span>`:''}${stale?'<span class="down">⚠ моделот се освежува во заднина — освежи за минута</span>':''}<span><b>Сезонски фактор:</b> ${fmt1(MI.gf*100)/100} (${MI.gf1??'·'} / ${MI.gf2??'·'} по години)</span><span><b>Тренд</b> = последни 30 д. vs претходни 60 · <b>Лани</b> = 90 д. vs ист период лани</span></div></div>
     <div class="inline" style="margin-bottom:8px"><span class="hint">${fmt(cnt.n)} артикли по азбучен ред · страница ${NR.page+1}/${pages}</span>${NR.page>0?'<button class="btn sec" id="nprev">←</button>':''}${NR.page<pages-1?'<button class="btn sec" id="nnext">→</button>':''}<input id="njump" placeholder="скок на буква/име" style="width:170px"></div>
     <datalist id="dobl">${dobs.map(d=>`<option value="${esc(d.d)}">`).join('')}</datalist>
     <div class="card twrap" id="nrtable" style="padding:8px 10px"><table><colgroup><col><col style="width:62px"><col style="width:56px"><col style="width:88px"><col style="width:48px"><col style="width:56px"><col style="width:64px"><col style="width:190px"></colgroup><tr><th>Артикл</th><th class="n" title="Продажба ${NR.od.slice(8)}.${NR.od.slice(5,7)}–${last.slice(8)}.${last.slice(5,7)}">Прод.</th><th class="n">Зал.</th><th class="n" title="Тренд: последни 30 д. vs претходни 60 · Лани: 90 д. vs ист период лани">Тренд / лани</th><th class="n" title="Сезонски фактор">Сез.</th><th class="n">Предл.</th><th class="n">Нарачај</th><th>Добавувач</th></tr>
