@@ -124,6 +124,7 @@ textarea{width:100%;min-height:72px;resize:vertical}
 .note{white-space:pre-wrap;font-size:14px}
 .bulk{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:10px 0;margin-top:10px}
 @media (prefers-reduced-motion:no-preference){.tile,.card{transition:border-color .15s}}
+tr.rh td,.rh{background:rgba(124,58,237,.10)} tr.rh td:first-child{box-shadow:inset 4px 0 0 #7c3aed} .chip.rh{background:rgba(124,58,237,.15);color:#7c3aed}
 #login{max-width:380px;margin:60px auto;padding:0 16px}
 body.auth header,body.auth main{display:none}
 </style>
@@ -132,7 +133,7 @@ body.auth header,body.auth main{display:none}
 <header><div class="hwrap">
   <div class="brand">Merifarm<small>залиха</small></div>
   <input id="q" type="search" placeholder="Пребарај артикл по име или шифра…" autocomplete="off">
-  <nav><a href="#pregled" id="n-pregled">Преглед</a><a href="#artikli" id="n-artikli">Артикли</a><a href="#vlezovi" id="n-vlezovi">Влезови</a><a href="#naracki" id="n-naracki">Нарачки</a><a href="#rokovi" id="n-rokovi">Рокови</a><a href="#brendovi" id="n-brendovi">Брендови</a><a href="#tagovi" id="n-tagovi">Тагови</a></nav><a class="hint" id="who" href="#najavi" style="margin-left:auto;text-decoration:none" title="Последни најави"></a><button class="btn sec" id="logout" style="padding:6px 10px">Одјава</button>
+  <nav><a href="#pregled" id="n-pregled">Преглед</a><a href="#artikli" id="n-artikli">Артикли</a><a href="#vlezovi" id="n-vlezovi">Влезови</a><a href="#naracki" id="n-naracki">Нарачки</a><a href="#rokovi" id="n-rokovi">Рокови</a><a href="#brendovi" id="n-brendovi">Брендови</a><a href="#tagovi" id="n-tagovi">Тагови</a><a href="#rashod" id="n-rashod">Расход</a></nav><a class="hint" id="who" href="#najavi" style="margin-left:auto;text-decoration:none" title="Последни најави"></a><button class="btn sec" id="logout" style="padding:6px 10px">Одјава</button>
 </div></header>
 <div id="login" hidden><form id="lform" class="card"><h1>Merifarm Залиха</h1><p class="sub">Најави се за да продолжиш</p>
   <label class="hint">Е-пошта</label><input id="lemail" type="email" autocomplete="username" required style="width:100%;margin:4px 0 10px">
@@ -518,6 +519,16 @@ async function viewArtikli(term){
   });
 }
 
+async function viewRashod(){
+  main.innerHTML='<div class="empty">Вчитувам расход…</div>';
+  const rows=await sql(`select r.datum,r.dokument,r.sifra,a.ime,r.kolicina,r.vrednost from rashod r join articles a on a.sifra=r.sifra order by r.datum desc, r.dokument, a.ime`);
+  const [t]=await sql(`select count(distinct datum||dokument) dok, sum(kolicina) k, sum(vrednost) v from rashod`);
+  const groups={}; rows.forEach(r=>{ const k=r.datum+' · '+r.dokument; (groups[k] ??= []).push(r); });
+  main.innerHTML=`<h1>Расход</h1><p class="sub">Излез што <b>не е продажба</b> (сметкопотврди кон други аптеки, отписи, враќања). Се одзема од продажбата при анализа и нарачка, но останува видлив. ${t.dok} документи · ${fmt(t.k)} парч. · ${fmt(t.v)} ден.</p>
+    ${Object.entries(groups).map(([k,g])=>`<h2>${esc(k)} <span class="hint">· ${g.length} ставки · ${fmt1(g.reduce((a,r)=>a+ +r.kolicina,0))} парч. · ${fmt(g.reduce((a,r)=>a+ +(r.vrednost||0),0))} ден.</span></h2>
+      <div class="card twrap"><table><tr><th>Артикл</th><th class="n">Кол.</th><th class="n">Вредност</th></tr>
+      ${g.map(r=>`<tr class="rh"><td><a class="art" href="#a${r.sifra}">${esc(r.ime)}</a> <span class="code">${r.sifra}</span></td><td class="n">${fmt1(r.kolicina)}</td><td class="n">${fmt2(r.vrednost)}</td></tr>`).join('')}</table></div>`).join('')||'<div class="card empty">Нема внесен расход</div>'}`;
+}
 async function viewTagovi(){
   main.innerHTML='<div class="empty">Вчитувам тагови…</div>';
   const rows=await sql(`select g.ime grupa, t.ime taga, t.id, count(at.sifra) n from tag_groups g join tags t on t.group_id=g.id left join article_tags at on at.tag_id=t.id group by 1,2,3,g.redosled order by g.redosled,g.ime,n desc,t.ime`);
@@ -826,6 +837,7 @@ async function viewArtikal(sifra){
     (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-90-interval '1 year' and datum<= d-interval '1 year') l90`);
   const nab=await sql(`select r.datum,r.broj,r.br_faktura,s.ime dobavuvac,s.id sid,ri.kol,ri.nab_cena,round(ri.nab_cena*(1+coalesce(ri.ddv_stapka,0)/100),2) so_ddv,ri.prod_cena from receipt_items ri join receipts r on r.id=ri.receipt_id left join suppliers s on s.id=r.supplier_id where ri.sifra='${sifra}' order by r.datum desc, r.id desc limit 40`);
   const last=nab[0];
+  const rsh=await sql(`select datum,dokument,kolicina,vrednost from rashod where sifra='${sifra}' order by datum desc limit 20`);
   const [lots,pendA,[lstate]]=await Promise.all([sql(`select * from lot_overview where sifra='${sifra}' and status='aktivna' order by rok`),sql(`select id,kolicina,datum from lot_pending where sifra='${sifra}' and status='ceka' order by datum`),sql(`select applied_through from lot_state where sifra='${sifra}'`)]);
   const dnevno=(+a.prod_90)/90; const pokrie=dnevno>0?Math.round((+a.zaliha||0)/dnevno):null;
   const per=[['7 дена',7],['30 дена',30],['90 дена',90],['6 мес.',182],['12 мес.',365]];
@@ -853,6 +865,7 @@ async function viewArtikal(sifra){
       <p class="hint" style="margin-top:10px">Зелено: моменталната залиха го покрива периодот. Црвено: недостига.</p></div>
     <h2>Продажба по месец, по години (парчиња)</h2><div class="card">${Y.chart}<div class="twrap" style="margin-top:10px">${Y.table}</div></div>
     <h2>Рокови (серии)</h2>${lotsSection(sifra,lots,pendA,lstate)}
+    ${rsh.length?`<h2>Расход (не е продажба)</h2><div class="card twrap rh"><table><tr><th>Датум</th><th>Документ</th><th class="n">Кол.</th><th class="n">Вредност</th></tr>${rsh.map(r=>`<tr class="rh"><td>${esc(r.datum)}</td><td>${esc(r.dokument)}</td><td class="n">${fmt1(r.kolicina)}</td><td class="n">${fmt2(r.vrednost)}</td></tr>`).join('')}</table><p class="hint" style="margin:8px 0 0">Овие количини се одземени од продажбата за тој ден.</p></div>`:''}
     <h2>Влезови (набавки)</h2><div class="card twrap"><table><tr><th>Датум</th><th>Добавувач</th><th>Приемен лист / фактура</th><th class="n">Кол.</th><th class="n">Наб. без ДДВ</th><th class="n">Наб. со ДДВ</th><th class="n">Прод. цена</th></tr>
       ${nab.length?nab.map(r=>`<tr><td>${esc(r.datum)}</td><td>${r.sid?`<a class="art" href="#d${r.sid}">${esc(r.dobavuvac)}</a>`:'—'}</td><td><span class="code">${esc(r.broj)}${r.br_faktura?' · ф. '+esc(r.br_faktura):''}</span></td><td class="n">${fmt1(r.kol)}</td><td class="n">${fmt2(r.nab_cena)}</td><td class="n">${fmt2(r.so_ddv)}</td><td class="n">${fmt2(r.prod_cena)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Нема увезени влезови за овој артикл</td></tr>'}</table></div>
     <div class="row">
@@ -900,7 +913,7 @@ function route(){
   const h=(location.hash||'#pregled').slice(1);
   document.querySelectorAll('nav a').forEach(a=>a.classList.toggle('on',a.id==='n-'+h));
   if(!mcp) return;
-  const run = /^a\d/.test(h) ? viewArtikal(h.slice(1)) : /^r\d+$/.test(h) ? viewPriem(h.slice(1)) : /^d\d+$/.test(h) ? viewDobavuvac(h.slice(1)) : h==='artikli' ? viewArtikli(q.value) : h==='tagovi' ? viewTagovi() : h==='vlezovi' ? viewVlezovi() : h==='naracki' ? viewNaracki() : /^o\d+$/.test(h) ? viewNaracka(h.slice(1)) : /^oc\d+_/.test(h) ? viewCheck(h) : h==='rokovi' ? viewProverki() : h==='brendovi' ? viewBrendovi() : h==='najavi' ? viewNajavi() : viewPregled();
+  const run = /^a\d/.test(h) ? viewArtikal(h.slice(1)) : /^r\d+$/.test(h) ? viewPriem(h.slice(1)) : /^d\d+$/.test(h) ? viewDobavuvac(h.slice(1)) : h==='artikli' ? viewArtikli(q.value) : h==='tagovi' ? viewTagovi() : h==='rashod' ? viewRashod() : h==='vlezovi' ? viewVlezovi() : h==='naracki' ? viewNaracki() : /^o\d+$/.test(h) ? viewNaracka(h.slice(1)) : /^oc\d+_/.test(h) ? viewCheck(h) : h==='rokovi' ? viewProverki() : h==='brendovi' ? viewBrendovi() : h==='najavi' ? viewNajavi() : viewPregled();
   run.catch(fail);
 }
 let t; q.addEventListener('input',()=>{ if(window.AF) window.AF.page=0; clearTimeout(t); t=setTimeout(()=>{ if(location.hash!=='#artikli') location.hash='artikli'; else route(); },350);});
