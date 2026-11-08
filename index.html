@@ -405,13 +405,15 @@ async function loadNaracka(){
     else if(ev.key==='ArrowDown'){ ev.preventDefault(); accept(tr); go(tr,1,inp.classList.contains('ol-k')?'.ol-k':'.ol-d'); }
     else if(ev.key==='ArrowUp'){ ev.preventDefault(); go(tr,-1,inp.classList.contains('ol-k')?'.ol-k':'.ol-d'); } }));
   const RSH={}; rows.forEach(r=>{ if(+r.rashod365) RSH[r.sifra]={k:+r.rashod365,last:r.rashod_last,ime:r.ime}; });
-  const warned=new Set();
-  function paziRashod(sf){ if(!RSH[sf]||warned.has(sf)) return; warned.add(sf); const r=RSH[sf];
+  const warned=new Set(); let MUTE={}; try{ MUTE=JSON.parse(localStorage.getItem('rashod_mute')||'{}'); }catch(e){}
+  function paziRashod(sf){ if(!RSH[sf]||warned.has(sf)) return; const r=RSH[sf]; if(MUTE[sf]&&MUTE[sf]===r.last) return; warned.add(sf);
     const d=document.createElement('div'); d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px';
     d.innerHTML=`<div class="card" style="max-width:420px;border:2px solid #7c3aed"><h2 style="margin:0 0 8px;color:#7c3aed;font-size:16px;text-transform:none;letter-spacing:0">⚠ Пази расход</h2>
       <p style="margin:0 0 6px"><b>${esc(r.ime)}</b></p><p style="margin:0 0 12px">Овој артикл имал <b>расход</b> (излез што не е продажба) од <b>${fmt1(r.k)} парч.</b> во последните 12 месеци, последен пат ${esc(r.last||'')}. Продажбата и предлогот се без расходот — провери дали навистина треба да се нарачува.</p>
-      <div class="inline"><button class="btn" style="background:#7c3aed">Разбрав</button><a class="btn sec" href="#a${sf}">Отвори артикл</a></div></div>`;
-    d.querySelector('.btn').onclick=()=>d.remove(); document.body.appendChild(d); }
+      <div class="inline"><button class="btn ok1" style="background:#7c3aed">Разбрав</button><button class="btn sec mute1">Не прикажувај пак до нареден расход</button><a class="btn sec" href="#a${sf}">Отвори артикл</a></div></div>`;
+    d.querySelector('.ok1').onclick=()=>d.remove();
+    d.querySelector('.mute1').onclick=()=>{ MUTE[sf]=r.last; try{ localStorage.setItem('rashod_mute',JSON.stringify(MUTE)); }catch(e){} d.remove(); };
+    document.body.appendChild(d); }
   box.querySelectorAll('.ol-k').forEach(inp=>inp.addEventListener('input',()=>{ if(+inp.value>0) paziRashod(inp.closest('tr').dataset.s); }));
   box.querySelectorAll('.ol-k,.ol-d').forEach(inp=>inp.addEventListener('input',()=>{ const tr=inp.closest('tr'); const sf=tr.dataset.s; clearTimeout(tmr[sf]);
     tmr[sf]=setTimeout(async()=>{ const k=tr.querySelector('.ol-k').value, d=tr.querySelector('.ol-d').value.trim();
