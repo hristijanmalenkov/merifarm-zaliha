@@ -125,6 +125,7 @@ textarea{width:100%;min-height:72px;resize:vertical}
 .bulk{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:10px 0;margin-top:10px}
 @media (prefers-reduced-motion:no-preference){.tile,.card{transition:border-color .15s}}
 tr.rh td,.rh{background:rgba(124,58,237,.10)} tr.rh td:first-child{box-shadow:inset 4px 0 0 #7c3aed} .chip.rh{background:rgba(124,58,237,.15);color:#7c3aed}
+.rsh{color:var(--bad);font-weight:600;font-size:.9em}
 #login{max-width:380px;margin:60px auto;padding:0 16px}
 body.auth header,body.auth main{display:none}
 </style>
@@ -195,14 +196,15 @@ function lineChart(items, labelOf, valueOf, h=150){
   const last=items[n-1]; s+=`<circle cx="${x(n-1)}" cy="${y(valueOf(last))}" r="3" class="bar"/>`;
   return s+'</svg>';
 }
-function yoyTable(rows){ // rows: {y,m,kol}
-  const years=[...new Set(rows.map(r=>+r.y))].sort(); const by={}; rows.forEach(r=>{by[r.y+'-'+r.m]=+r.kol;});
+const rsh=(v,r)=>(v==null?'·':fmt1(v))+(r?` <span class="rsh" title="расход (не е продажба)">(${fmt1(r)})</span>`:'');
+function yoyTable(rows){ // rows: {y,m,kol,rashod?}
+  const years=[...new Set(rows.map(r=>+r.y))].sort(); const by={}, rb={}; rows.forEach(r=>{by[r.y+'-'+r.m]=+r.kol; if(+r.rashod) rb[r.y+'-'+r.m]=+r.rashod;});
   const tot={}; years.forEach(y=>tot[y]=0);
   let h=`<table><tr><th>Месец</th>${years.map(y=>`<th class="n">${y}</th>`).join('')}<th class="n">${years.at(-1)} vs ${years.at(-2)??''}</th></tr>`;
   for(let m=1;m<=12;m++){
     const v=years.map(y=>by[y+'-'+m]); years.forEach((y,i)=>tot[y]+=v[i]||0);
     const a=v.at(-1), b=v.at(-2);
-    h+=`<tr><td>${MES[m-1]}</td>${v.map(x=>`<td class="n">${x==null?'·':fmt1(x)}</td>`).join('')}<td class="n">${a!=null&&b!=null?pct(a,b):'—'}</td></tr>`;
+    h+=`<tr><td>${MES[m-1]}</td>${v.map((x,i)=>`<td class="n">${rsh(x,rb[years[i]+'-'+m])}</td>`).join('')}<td class="n">${a!=null&&b!=null?pct(a,b):'—'}</td></tr>`;
   }
   h+=`<tr><td><b>Вкупно</b></td>${years.map(y=>`<td class="n"><b>${fmt(tot[y])}</b></td>`).join('')}<td></td></tr></table>`;
   const series=years.slice(-3).map((y,i,arr)=>({name:String(y),cls:'b'+(arr.length-i),vals:Array.from({length:12},(_,m)=>by[y+'-'+(m+1)]||0)}));
@@ -420,10 +422,10 @@ const MINI={};
 function sparkline(vals,h=56){ const W=640,n=vals.length; if(n<2) return ''; const max=Math.max(1,...vals); const x=i=>8+(W-16)*i/(n-1), y=v=>6+(h-14)*(1-v/max);
   const pts=vals.map((v,i)=>`${x(i)},${y(v)}`).join(' '); return `<svg viewBox="0 0 ${W} ${h}" style="height:${h}px"><polygon class="area" points="${x(0)},${y(0)} ${pts} ${x(n-1)},${y(0)}"/><polyline class="line" points="${pts}"/></svg>`; }
 function kartonHtml(sf,d){
-  const years=[...new Set(d.mon.map(r=>+r.y))].sort(); const by={}; d.mon.forEach(r=>by[r.y+'-'+r.m]=+r.kol);
+  const years=[...new Set(d.mon.map(r=>+r.y))].sort(); const by={}, rb={}; d.mon.forEach(r=>{by[r.y+'-'+r.m]=+r.kol; if(+r.rashod) rb[r.y+'-'+r.m]=+r.rashod;});
   const curY=years.at(-1); const colors={0:'var(--bad)',1:'var(--accent)',2:'var(--good)'};
   const rows=years.map((y,i)=>{ const tot=Array.from({length:12},(_,m)=>by[y+'-'+(m+1)]||0).reduce((a,b)=>a+b,0);
-    return `<tr><td style="color:${colors[years.length-1-i]||'var(--muted)'};font-weight:600">${y}</td>${Array.from({length:12},(_,m)=>{const v=by[y+'-'+(m+1)]; return `<td class="n">${v==null?'·':fmt1(v)}</td>`;}).join('')}<td class="n"><b>${fmt(tot)}</b></td></tr>`; }).join('');
+    return `<tr><td style="color:${colors[years.length-1-i]||'var(--muted)'};font-weight:600">${y}</td>${Array.from({length:12},(_,m)=>{const v=by[y+'-'+(m+1)]; return `<td class="n">${rsh(v,rb[y+'-'+(m+1)])}</td>`;}).join('')}<td class="n"><b>${fmt(tot)}</b></td></tr>`; }).join('');
   const seq=[]; years.forEach(y=>{ for(let m=1;m<=12;m++){ if(y===curY && m>+d.last.slice(5,7)) break; seq.push(by[y+'-'+m]||0);} });
   const rate=(+d.prod_90)/90; const traeDo=rate>0&&+d.zaliha>0?new Date(new Date(d.last).getTime()+(+d.zaliha/rate)*86400000).toLocaleDateString('mk-MK'):'—';
   return `<div class="tiles" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
@@ -442,7 +444,7 @@ function wireMini(root){
   root.querySelectorAll('[data-mini]').forEach(a=>a.onclick=async e=>{ e.preventDefault(); const s=a.dataset.mini; const tr=a.closest('tr'); const next=tr.nextElementSibling;
     if(next&&next.classList.contains('minirow')){ next.remove(); return; }
     const row=document.createElement('tr'); row.className='minirow'; row.innerHTML=`<td colspan="${tr.children.length}"><div class="empty">Вчитувам…</div></td>`; tr.after(row);
-    if(!MINI[s]){ const [mon,[st]]=await Promise.all([sql(`select extract(year from datum)::int y, extract(month from datum)::int m, sum(kolicina) kol from sales_daily where sifra='${s}' group by 1,2 order by 1,2`),
+    if(!MINI[s]){ const [mon,[st]]=await Promise.all([sql(`select s.y,s.m,s.kol,r.kol rashod from (select extract(year from datum)::int y, extract(month from datum)::int m, sum(kolicina) kol from sales_daily where sifra='${s}' group by 1,2) s left join rashod_monthly r on r.sifra='${s}' and r.y=s.y and r.m=s.m order by 1,2`),
         sql(`select st.zaliha,st.prod_90,st.posledna_prodazba posl,st.prv_izlez prv,a.cena,(select max(datum) from sales_daily) last, m.predlog,m.demand,m.safety,m.f,m.own_f,m.g_f,m.w,m.rate mrate,m.dena,m.do_datum,m.trend30,m.yoy,m.s30,m.s_prev60,m.s90,m.lani90,m.lani_t,m.spike,m.flags from article_stats st join articles a on a.sifra=st.sifra left join order_model m on m.sifra=st.sifra where st.sifra='${s}'`)]);
       MINI[s]={mon,...st}; }
     row.firstElementChild.innerHTML=`<div class="minibox" style="display:block">${kartonHtml(s,MINI[s])}</div>`; });
@@ -829,7 +831,7 @@ async function viewArtikal(sifra){
   await loadTags();
   const [a]=await sql(`select o.*, a.zabeleska, a.zabeleska_datum from article_ov o join articles a on a.sifra=o.sifra where o.sifra='${sifra}'`);
   if(!a){ main.innerHTML='<div class="empty">Артиклот не постои</div>'; return; }
-  const [mytags,yoy,dni,hist]=await Promise.all([sql(`select t.id,t.ime,g.ime grupa from article_tags at join tags t on t.id=at.tag_id join tag_groups g on g.id=t.group_id where at.sifra='${sifra}' order by g.redosled,g.ime,t.ime`),sql(`select extract(year from datum)::int y, extract(month from datum)::int m, sum(kolicina) kol from sales_daily where sifra='${sifra}' group by 1,2 order by 1,2`),sql(`select datum, kolicina kol from sales_daily where sifra='${sifra}' and datum> (select max(datum) from sales_daily)-90 order by 1`),sql(`select datum, kolicina from stock_snapshots where sifra='${sifra}' order by 1 desc limit 30`)]);
+  const [mytags,yoy,dni,hist]=await Promise.all([sql(`select t.id,t.ime,g.ime grupa from article_tags at join tags t on t.id=at.tag_id join tag_groups g on g.id=t.group_id where at.sifra='${sifra}' order by g.redosled,g.ime,t.ime`),sql(`select s.y,s.m,s.kol,r.kol rashod from (select extract(year from datum)::int y, extract(month from datum)::int m, sum(kolicina) kol from sales_daily where sifra='${sifra}' group by 1,2) s left join rashod_monthly r on r.sifra='${sifra}' and r.y=s.y and r.m=s.m order by 1,2`),sql(`select datum, kolicina kol from sales_daily where sifra='${sifra}' and datum> (select max(datum) from sales_daily)-90 order by 1`),sql(`select datum, kolicina from stock_snapshots where sifra='${sifra}' order by 1 desc limit 30`)]);
   const [cmp]=await sql(`with d as (select max(datum) d from sales_daily) select
     (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-30) t30,
     (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-30-interval '1 year' and datum<= d-interval '1 year') l30,
@@ -837,7 +839,7 @@ async function viewArtikal(sifra){
     (select sum(kolicina) from sales_daily,d where sifra='${sifra}' and datum> d-90-interval '1 year' and datum<= d-interval '1 year') l90`);
   const nab=await sql(`select r.datum,r.broj,r.br_faktura,s.ime dobavuvac,s.id sid,ri.kol,ri.nab_cena,round(ri.nab_cena*(1+coalesce(ri.ddv_stapka,0)/100),2) so_ddv,ri.prod_cena from receipt_items ri join receipts r on r.id=ri.receipt_id left join suppliers s on s.id=r.supplier_id where ri.sifra='${sifra}' order by r.datum desc, r.id desc limit 40`);
   const last=nab[0];
-  const rsh=await sql(`select datum,dokument,kolicina,vrednost from rashod where sifra='${sifra}' order by datum desc limit 20`);
+  const rshRows=await sql(`select datum,dokument,kolicina,vrednost from rashod where sifra='${sifra}' order by datum desc limit 20`);
   const [lots,pendA,[lstate]]=await Promise.all([sql(`select * from lot_overview where sifra='${sifra}' and status='aktivna' order by rok`),sql(`select id,kolicina,datum from lot_pending where sifra='${sifra}' and status='ceka' order by datum`),sql(`select applied_through from lot_state where sifra='${sifra}'`)]);
   const dnevno=(+a.prod_90)/90; const pokrie=dnevno>0?Math.round((+a.zaliha||0)/dnevno):null;
   const per=[['7 дена',7],['30 дена',30],['90 дена',90],['6 мес.',182],['12 мес.',365]];
@@ -865,7 +867,7 @@ async function viewArtikal(sifra){
       <p class="hint" style="margin-top:10px">Зелено: моменталната залиха го покрива периодот. Црвено: недостига.</p></div>
     <h2>Продажба по месец, по години (парчиња)</h2><div class="card">${Y.chart}<div class="twrap" style="margin-top:10px">${Y.table}</div></div>
     <h2>Рокови (серии)</h2>${lotsSection(sifra,lots,pendA,lstate)}
-    ${rsh.length?`<h2>Расход (не е продажба)</h2><div class="card twrap rh"><table><tr><th>Датум</th><th>Документ</th><th class="n">Кол.</th><th class="n">Вредност</th></tr>${rsh.map(r=>`<tr class="rh"><td>${esc(r.datum)}</td><td>${esc(r.dokument)}</td><td class="n">${fmt1(r.kolicina)}</td><td class="n">${fmt2(r.vrednost)}</td></tr>`).join('')}</table><p class="hint" style="margin:8px 0 0">Овие количини се одземени од продажбата за тој ден.</p></div>`:''}
+    ${rshRows.length?`<h2>Расход (не е продажба)</h2><div class="card twrap rh"><table><tr><th>Датум</th><th>Документ</th><th class="n">Кол.</th><th class="n">Вредност</th></tr>${rshRows.map(r=>`<tr class="rh"><td>${esc(r.datum)}</td><td>${esc(r.dokument)}</td><td class="n">${fmt1(r.kolicina)}</td><td class="n">${fmt2(r.vrednost)}</td></tr>`).join('')}</table><p class="hint" style="margin:8px 0 0">Овие количини се одземени од продажбата за тој ден.</p></div>`:''}
     <h2>Влезови (набавки)</h2><div class="card twrap"><table><tr><th>Датум</th><th>Добавувач</th><th>Приемен лист / фактура</th><th class="n">Кол.</th><th class="n">Наб. без ДДВ</th><th class="n">Наб. со ДДВ</th><th class="n">Прод. цена</th></tr>
       ${nab.length?nab.map(r=>`<tr><td>${esc(r.datum)}</td><td>${r.sid?`<a class="art" href="#d${r.sid}">${esc(r.dobavuvac)}</a>`:'—'}</td><td><span class="code">${esc(r.broj)}${r.br_faktura?' · ф. '+esc(r.br_faktura):''}</span></td><td class="n">${fmt1(r.kol)}</td><td class="n">${fmt2(r.nab_cena)}</td><td class="n">${fmt2(r.so_ddv)}</td><td class="n">${fmt2(r.prod_cena)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Нема увезени влезови за овој артикл</td></tr>'}</table></div>
     <div class="row">
