@@ -363,13 +363,14 @@ async function loadNaracka(){
         coalesce((select sum(kolicina) from sales_daily s where s.sifra=a.sifra and s.datum>='${NR.od}'),0) period,
         case when coalesce(st.prod_90,0)>0 then st.prod_90/90.0 when coalesce(st.prod_365,0)>0 then st.prod_365/365.0 else 0 end rate,
         ol.kolicina moja, ol.dobavuvac moj_dob,
+        (select sum(kolicina) from rashod r where r.sifra=a.sifra and r.datum>=current_date-365) rashod365, (select max(datum) from rashod r where r.sifra=a.sifra) rashod_last,
         v.predlog, v.demand, v.safety, m.f, m.own_f, m.g_f, m.w, m.trend30, m.yoy, m.s30, m.s90, m.s_prev60, m.lani90, m.lani_t, m.spike, m.flags, m.rate mrate
       from articles a join article_stats st on st.sifra=a.sifra left join article_cost c on c.sifra=a.sifra left join order_lines ol on ol.sifra=a.sifra left join order_model m on m.sifra=a.sifra left join order_model_view('${NR.do}') v on v.sifra=a.sifra
       where a.aktiven and a.ime not like '%(неактивен)' order by a.ime limit ${NPAGE} offset ${NR.page*NPAGE})
       select * from r`)]);
   const FL={pad:['▼ пад','bad','последни 30 дена ≥30% под претходните 60'],rast:['▲ раст','good','последни 30 дена ≥30% над претходните 60'],lani_pad:['лани ↓','bad','90 дена ≥30% под истиот период лани'],lani_rast:['лани ↑','good','90 дена ≥30% над истиот период лани'],novo:['ново','','нов артикл — нема споредба со лани'],spike:['еднократно','warn','еден ден носи >40% од продажбата — тој ден е изземен од просекот'],sezonski:['сезонски','warn','сопствен сезонски фактор значајно различен од глобалниот'],minus:['минус','bad','залихата е негативна — се смета како 0']};
   const trendTxt=v=>v==null?'<span class="hint">·</span>':`<span class="${v>=0.3?'up':v<=-0.3?'down':''}">${v>=0?'+':''}${fmt(v*100)}%</span>`;
-  const chips=r=>(r.flags||[]).map(k=>FL[k]?`<span class="chip ${FL[k][1]==='bad'?'bad':''}" style="${FL[k][1]==='warn'?'background:rgba(212,177,6,.18);color:var(--warn)':FL[k][1]==='good'?'background:rgba(46,125,50,.14);color:var(--good)':''}" title="${esc(FL[k][2])}">${FL[k][0]}</span>`:'').join('');
+  const chips=r=>(r.rashod365?`<span class="chip rh" title="Овој артикл имал расход (не-продажен излез) во последните 12 месеци — последен ${esc(r.rashod_last||'')}">⚠ расход ${fmt1(r.rashod365)}</span>`:'')+(r.flags||[]).map(k=>FL[k]?`<span class="chip ${FL[k][1]==='bad'?'bad':''}" style="${FL[k][1]==='warn'?'background:rgba(212,177,6,.18);color:var(--warn)':FL[k][1]==='good'?'background:rgba(46,125,50,.14);color:var(--good)':''}" title="${esc(FL[k][2])}">${FL[k][0]}</span>`:'').join('');
   const expl=r=>`${fmt1(+r.mrate)}/ден × сезона ${fmt1(+r.f*100)/100} × ${days} д. = ${fmt1(r.demand)} + сигурност ${fmt1(r.safety)} − залиха ${fmt1(Math.max(0,+r.zaliha))} → ${fmt(r.predlog)}`;
   const cls=r=>{ const z=+r.zaliha, per=+r.period, rate=+(r.mrate??r.rate)*+(r.f||1), need=+(r.demand||0);
     if(per>z) return 'c-orange'; if(rate>0 && z<rate*30) return 'c-red'; if(need>z && z>per) return 'c-yellow'; return ''; };
@@ -403,6 +404,15 @@ async function loadNaracka(){
     if(ev.key==='Enter'){ ev.preventDefault(); if(inp.classList.contains('ol-k')){ accept(tr); tr.querySelector('.ol-d').focus(); } else { accept(tr); go(tr,1,'.ol-k'); } }
     else if(ev.key==='ArrowDown'){ ev.preventDefault(); accept(tr); go(tr,1,inp.classList.contains('ol-k')?'.ol-k':'.ol-d'); }
     else if(ev.key==='ArrowUp'){ ev.preventDefault(); go(tr,-1,inp.classList.contains('ol-k')?'.ol-k':'.ol-d'); } }));
+  const RSH={}; rows.forEach(r=>{ if(+r.rashod365) RSH[r.sifra]={k:+r.rashod365,last:r.rashod_last,ime:r.ime}; });
+  const warned=new Set();
+  function paziRashod(sf){ if(!RSH[sf]||warned.has(sf)) return; warned.add(sf); const r=RSH[sf];
+    const d=document.createElement('div'); d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px';
+    d.innerHTML=`<div class="card" style="max-width:420px;border:2px solid #7c3aed"><h2 style="margin:0 0 8px;color:#7c3aed;font-size:16px;text-transform:none;letter-spacing:0">⚠ Пази расход</h2>
+      <p style="margin:0 0 6px"><b>${esc(r.ime)}</b></p><p style="margin:0 0 12px">Овој артикл имал <b>расход</b> (излез што не е продажба) од <b>${fmt1(r.k)} парч.</b> во последните 12 месеци, последен пат ${esc(r.last||'')}. Продажбата и предлогот се без расходот — провери дали навистина треба да се нарачува.</p>
+      <div class="inline"><button class="btn" style="background:#7c3aed">Разбрав</button><a class="btn sec" href="#a${sf}">Отвори артикл</a></div></div>`;
+    d.querySelector('.btn').onclick=()=>d.remove(); document.body.appendChild(d); }
+  box.querySelectorAll('.ol-k').forEach(inp=>inp.addEventListener('input',()=>{ if(+inp.value>0) paziRashod(inp.closest('tr').dataset.s); }));
   box.querySelectorAll('.ol-k,.ol-d').forEach(inp=>inp.addEventListener('input',()=>{ const tr=inp.closest('tr'); const sf=tr.dataset.s; clearTimeout(tmr[sf]);
     tmr[sf]=setTimeout(async()=>{ const k=tr.querySelector('.ol-k').value, d=tr.querySelector('.ol-d').value.trim();
       try{ await sql((k===''||+k===0)&&!d?`delete from order_lines where sifra='${sf}'`:`insert into order_lines(sifra,kolicina,dobavuvac,updated_at) values ('${sf}',${k===''?'null':+k},${d?`'${sq(d)}'`:'null'},now()) on conflict (sifra) do update set kolicina=excluded.kolicina,dobavuvac=excluded.dobavuvac,updated_at=now()`); tr.classList.add('saved'); setTimeout(()=>tr.classList.remove('saved'),800); }
