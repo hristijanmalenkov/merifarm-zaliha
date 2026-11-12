@@ -464,6 +464,27 @@ function wireMini(root){
 function groupedRows(list, keyOf, rowOf){ const out=[]; let last=null; list.forEach(r=>{ const k=keyOf(r)||'(без добавувач)'; if(k!==last){ out.push({h:k}); last=k; } out.push(rowOf(r)); }); return out; }
 /* ---- PDF од табела (html2canvas + jsPDF) ---- */
 function loadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector(`script[src="${src}"]`)) return res(); const sc=document.createElement('script'); sc.src=src; sc.onload=res; sc.onerror=rej; document.head.appendChild(sc); }); }
+async function makePdfExcel(title, suppliers, items, filename, msgEl){
+  try{
+    msgEl.textContent='Правам PDF…';
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'}); let page=0;
+    const tdS='border:1px solid #8a8a8a;padding:5px 7px;font:12px Calibri,Arial,sans-serif';
+    const render=async(html)=>{ const div=document.createElement('div'); div.style.cssText='position:fixed;left:-10000px;top:0;width:794px;background:#fff;color:#000;padding:26px 30px;font:12px Calibri,Arial,sans-serif'; div.innerHTML=html; document.body.appendChild(div);
+      const canvas=await html2canvas(div,{scale:2,backgroundColor:'#fff'}); div.remove(); const img=canvas.toDataURL('image/jpeg',0.93); if(page++>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,0,210,Math.min(canvas.height*210/canvas.width,297)); };
+    const PER=34; const today=new Date().toLocaleDateString('mk-MK');
+    for(const d of suppliers){ const g=items.filter(i=>(i.dobavuvac||'')===d).sort((a,b)=>a.ime.localeCompare(b.ime));
+      for(let i=0;i<g.length;i+=PER){ const chunk=g.slice(i,i+PER); const pg=Math.floor(i/PER)+1, pgs=Math.ceil(g.length/PER);
+        await render(`<table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr><td colspan="4" style="${tdS};background:#1f4e78;color:#fff;font-size:15px;font-weight:bold;padding:8px">Merifarm — ${esc(title)}</td></tr>
+          <tr><td colspan="4" style="${tdS};background:#ddebf7;font-size:14px;font-weight:bold">Добавувач: ${esc(d||'(без добавувач)')}</td></tr>
+          <tr><td colspan="2" style="${tdS};background:#f2f2f2">Артикли: <b>${g.length}</b> · парчиња: <b>${fmt1(g.reduce((a,x)=>a+ +x.kolicina,0))}</b></td><td colspan="2" style="${tdS};background:#f2f2f2;text-align:right">Печатено: ${today}${pgs>1?' · стр. '+pg+'/'+pgs:''}</td></tr></table>
+          <table style="width:100%;border-collapse:collapse"><tr><th style="${tdS};background:#d9e1f2;text-align:center;width:28px">#</th><th style="${tdS};background:#d9e1f2;text-align:left;width:70px">Шифра</th><th style="${tdS};background:#d9e1f2;text-align:left">Артикл</th><th style="${tdS};background:#d9e1f2;text-align:right;width:70px">Количина</th><th style="${tdS};background:#d9e1f2;text-align:center;width:60px">✓</th></tr>
+          ${chunk.map((x,k)=>`<tr style="background:${(i+k)%2?'#fafafa':'#fff'}"><td style="${tdS};text-align:center;color:#666">${i+k+1}</td><td style="${tdS};font-family:Consolas,monospace">${x.sifra}</td><td style="${tdS}">${esc(x.ime)}</td><td style="${tdS};text-align:right;font-weight:bold;font-size:13px">${fmt1(x.kolicina)}</td><td style="${tdS}"></td></tr>`).join('')}
+          ${i+PER>=g.length?`<tr><td colspan="3" style="${tdS};background:#f2f2f2;font-weight:bold;text-align:right">Вкупно</td><td style="${tdS};background:#f2f2f2;font-weight:bold;text-align:right">${fmt1(g.reduce((a,x)=>a+ +x.kolicina,0))}</td><td style="${tdS};background:#f2f2f2"></td></tr>`:''}</table>`); } }
+    dl(filename, pdf.output('blob')); msgEl.textContent=`PDF е подготвен (${suppliers.length} добавувачи, ${page} стр.)`;
+  }catch(e){ msgEl.textContent='Грешка: '+(e.message||e); }
+}
 async function makePdf(title, rows, head, filename, msgEl){
   try{
     msgEl.textContent='Правам PDF…';
@@ -596,10 +617,20 @@ async function viewNaracki(){
   const allrows=await sql(`select o.id,o.datum,o.naziv,o.do_datum,o.status,o.parent_id,(select count(*) from order_items i where i.order_id=o.id) n,(select count(*) filter (where status='ima') from order_items i where i.order_id=o.id) ima,(select count(*) filter (where status='nema') from order_items i where i.order_id=o.id) nema,(select count(distinct coalesce(dobavuvac,'')) from order_items i where i.order_id=o.id) dob from orders o order by o.datum desc, o.id desc`);
   const done=r=>+r.n>0 && +r.ima + +r.nema === +r.n;
   const rows=NKALL?allrows:allrows.filter(r=>!done(r)); const nDone=allrows.filter(done).length;
-  main.innerHTML=`<h1>Нарачки</h1><p class="sub">${NKALL?'Сите нарачки':'Активни нарачки (во тек)'} · клик за работа по добавувачи</p>
+  const byDate={}; rows.forEach(r=>{ (byDate[r.datum] ??= []).push(r); });
+  const dates=Object.keys(byDate).sort().reverse();
+  const OPEN=window.NKOPEN||(window.NKOPEN={}); if(dates.length&&OPEN[dates[0]]===undefined) OPEN[dates[0]]=true;
+  const dmy=d=>d.slice(8)+'.'+d.slice(5,7)+'.'+d.slice(0,4);
+  const dayN=d=>['Недела','Понеделник','Вторник','Среда','Четврток','Петок','Сабота'][new Date(d).getDay()];
+  main.innerHTML=`<h1>Нарачки</h1><p class="sub">${NKALL?'Сите нарачки':'Активни нарачки (во тек)'} · по датуми · клик на датум = отвори/затвори</p>
     <div class="inline" style="margin-bottom:10px"><button class="tab${!NKALL?' on':''}" id="nk-akt">Активни (${allrows.length-nDone})</button><button class="tab${NKALL?' on':''}" id="nk-site">Сите (${allrows.length})</button></div>
-    <div class="card twrap"><table><tr><th>Датум</th><th>Нарачка</th><th class="n">Артикли</th><th class="n">Добавувачи</th><th class="n">Има</th><th class="n">Нема</th><th>Статус</th></tr>
-    ${rows.length?rows.map(r=>`<tr><td>${esc(r.datum)}</td><td><a class="art" href="#o${r.id}">${esc(r.naziv)}</a>${r.do_datum?'<div class="code">роба до '+esc(r.do_datum)+'</div>':''}</td><td class="n">${r.n}</td><td class="n">${r.dob}</td><td class="n up">${r.ima}</td><td class="n down">${r.nema}</td><td>${r.n>0&&+r.ima+ +r.nema===+r.n?'<span class="chip">завршена</span>':'<span class="chip bad" style="background:var(--accent-soft);color:var(--accent)">во тек</span>'}</td></tr>`).join(''):`<tr><td colspan="7" class="empty">${NKALL?'Нема потврдени нарачки. Направи ја од Преглед → Нарачка → „Потврди нарачка“.':'Нема активни нарачки — сите се завршени.'}</td></tr>`}</table></div>`;
+    ${dates.length?dates.map(d=>{ const g=byDate[d]; const na=g.reduce((a,r)=>a+ +r.n,0); const op=!!OPEN[d];
+      return `<div class="card" style="margin-bottom:10px;padding:0;overflow:hidden">
+        <div class="inline nk-day" data-d="${d}" style="cursor:pointer;padding:12px 16px;justify-content:space-between;background:var(--accent-soft)"><div><b style="font-size:16px">📁 ${dmy(d)}</b> <span class="hint">${dayN(d)} · ${g.length} ${g.length===1?'нарачка':'нарачки'} · ${na} артикли</span></div><span style="font-size:18px">${op?'▾':'▸'}</span></div>
+        <div ${op?'':'hidden'} class="twrap"><table><tr><th>Нарачка</th><th class="n">Артикли</th><th class="n">Добавувачи</th><th class="n">Има</th><th class="n">Нема</th><th>Статус</th></tr>
+        ${g.map(r=>`<tr><td><a class="art" href="#o${r.id}">${esc(r.naziv)}</a>${r.do_datum?'<div class="code">роба до '+esc(r.do_datum)+'</div>':''}</td><td class="n">${r.n}</td><td class="n">${r.dob}</td><td class="n up">${r.ima}</td><td class="n down">${r.nema}</td><td>${done(r)?'<span class="chip">завршена</span>':'<span class="chip" style="background:var(--accent-soft);color:var(--accent)">во тек</span>'}</td></tr>`).join('')}</table></div></div>`; }).join('')
+      :`<div class="card empty">${NKALL?'Нема потврдени нарачки. Направи ја од Преглед → Нарачка → „Потврди нарачка“.':'Нема активни нарачки — сите се завршени.'}</div>`}`;
+  main.querySelectorAll('.nk-day').forEach(h=>h.onclick=()=>{ OPEN[h.dataset.d]=!OPEN[h.dataset.d]; viewNaracki(); });
   document.getElementById('nk-akt').onclick=()=>{ NKALL=false; viewNaracki(); };
   document.getElementById('nk-site').onclick=()=>{ NKALL=true; viewNaracki(); };
 }
@@ -614,15 +645,21 @@ async function viewNaracka(id){
   const rest=alld.map(d=>d.d).filter(d=>!groups[d]);
   const key=d=>encodeURIComponent(d);
   main.innerHTML=`<a class="back" href="#naracki">← Нарачки</a><h1 style="margin-top:6px">${esc(o.naziv)}</h1><p class="sub">${esc(o.datum)} · ${items.length} артикли${o.do_datum?' · роба до '+esc(o.do_datum):''}</p>
-    <div class="inline" style="margin-bottom:10px"><button class="btn" id="pdfall">PDF — целата нарачка по добавувачи</button><span id="pdfallmsg" class="hint"></span></div>
+    <div class="inline" style="margin-bottom:10px"><button class="btn" id="pdfsel" style="background:#7c3aed">📄 PDF од штиклираните добавувачи</button><button class="btn sec" id="selall">Штиклирај сите</button><button class="btn sec" id="selnone">Ништо</button><button class="btn sec" id="pdfall">PDF — цела нарачка</button><span id="pdfallmsg" class="hint"></span></div>
     <h2>Добавувачи со артикли за нарачка</h2>
     <div class="card">${active.map(d=>{ const g=groups[d]; const done=g.filter(i=>i.status!=='ceka').length; const nema=g.filter(i=>i.status==='nema').length;
-      return `<div class="inline" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><div><a class="art" style="color:var(--good);font-size:16px" href="#oc${o.id}_${key(d)}">${d?esc(d):'(без добавувач)'}</a> <span class="hint">${g.length} артикли · ${done}/${g.length} проверени${nema?' · <span class="down">'+nema+' нема</span>':''}</span></div>
+      return `<div class="inline" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><div><input type="checkbox" class="seld" data-d="${esc(d)}" style="width:20px;height:20px;vertical-align:middle;margin-right:8px"><a class="art" style="color:var(--good);font-size:16px" href="#oc${o.id}_${key(d)}">${d?esc(d):'(без добавувач)'}</a> <span class="hint">${g.length} артикли · ${done}/${g.length} проверени${nema?' · <span class="down">'+nema+' нема</span>':''}</span></div>
         <div class="inline"><button class="btn sec pdfd" data-d="${esc(d)}">PDF</button><a class="btn" href="#oc${o.id}_${key(d)}">Отвори</a></div></div>`; }).join('')}</div>
     <h2>Останати добавувачи</h2><div class="card"><div class="inline">${rest.map(d=>`<span class="chip" style="background:var(--line);color:var(--muted)">${esc(d)}</span>`).join('')}</div></div>
     <h2>Сите артикли</h2><div class="card twrap"><table><tr><th>Артикл</th><th>Добавувач</th><th class="n">Кол.</th><th>Статус</th></tr>
       ${items.map(i=>`<tr><td><a class="art" href="#a${i.sifra}">${esc(i.ime)}</a> <span class="code">${i.sifra}</span></td><td>${esc(i.dobavuvac||'')}</td><td class="n">${fmt1(i.kolicina)}</td><td>${i.status==='ima'?'<span class="up">✓ има</span>':i.status==='nema'?'<span class="down">✗ нема</span>':'<span class="hint">чека</span>'}</td></tr>`).join('')}</table></div>`;
   document.getElementById('pdfall').onclick=()=>makePdf(`${o.naziv} · ${o.datum}`, groupedRows(items,i=>i.dobavuvac,i=>[i.sifra,i.ime,fmt1(i.kolicina)]), ['Шифра','Артикл','Количина'], `naracka-${o.datum}-site.pdf`, document.getElementById('pdfallmsg'));
+  document.getElementById('selall').onclick=()=>main.querySelectorAll('.seld').forEach(c=>c.checked=true);
+  document.getElementById('selnone').onclick=()=>main.querySelectorAll('.seld').forEach(c=>c.checked=false);
+  document.getElementById('pdfsel').onclick=()=>{ const sel=[...main.querySelectorAll('.seld:checked')].map(c=>c.dataset.d); const msg=document.getElementById('pdfallmsg');
+    if(!sel.length){ msg.textContent='Штиклирај барем еден добавувач.'; return; }
+    const list=items.filter(i=>sel.includes(i.dobavuvac||'')); const dd=o.datum.split('-').reverse().join('.');
+    makePdfExcel(`Нарачка ${dd}`, sel, list, `naracka-${o.datum}-${sel.length}-dobavuvaci.pdf`, msg); };
   main.querySelectorAll('.pdfd').forEach(b=>b.onclick=()=>{ const d=b.dataset.d; const g=groups[d]; const msg=document.createElement('span'); b.after(msg);
     makePdf(`Нарачка · ${d||'без добавувач'} · ${o.datum}`, g.map(i=>[i.sifra,i.ime,fmt1(i.kolicina)]), ['Шифра','Артикл','Количина'], `naracka-${(d||'bez').replace(/[^\w]+/g,'_')}-${o.datum}.pdf`, msg); });
 }
