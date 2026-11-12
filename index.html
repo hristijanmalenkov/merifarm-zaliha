@@ -470,19 +470,17 @@ async function makePdfExcel(title, suppliers, items, filename, msgEl){
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
     const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4'}); let page=0;
-    const tdS='border:1px solid #8a8a8a;padding:5px 7px;font:12px Calibri,Arial,sans-serif';
-    const render=async(html)=>{ const div=document.createElement('div'); div.style.cssText='position:fixed;left:-10000px;top:0;width:794px;background:#fff;color:#000;padding:26px 30px;font:12px Calibri,Arial,sans-serif'; div.innerHTML=html; document.body.appendChild(div);
+    const td='border:1px solid #000;padding:3px 6px;font:11.5px Calibri,Arial,sans-serif;vertical-align:middle';
+    const render=async(html)=>{ const div=document.createElement('div'); div.style.cssText='position:fixed;left:-10000px;top:0;width:794px;background:#fff;color:#000;padding:24px 28px;font:11.5px Calibri,Arial,sans-serif'; div.innerHTML=html; document.body.appendChild(div);
       const canvas=await html2canvas(div,{scale:2,backgroundColor:'#fff'}); div.remove(); const img=canvas.toDataURL('image/jpeg',0.93); if(page++>0) pdf.addPage(); pdf.addImage(img,'JPEG',0,0,210,Math.min(canvas.height*210/canvas.width,297)); };
-    const PER=34; const today=new Date().toLocaleDateString('mk-MK');
-    for(const d of suppliers){ const g=items.filter(i=>(i.dobavuvac||'')===d).sort((a,b)=>a.ime.localeCompare(b.ime));
-      for(let i=0;i<g.length;i+=PER){ const chunk=g.slice(i,i+PER); const pg=Math.floor(i/PER)+1, pgs=Math.ceil(g.length/PER);
-        await render(`<table style="width:100%;border-collapse:collapse;margin-bottom:8px"><tr><td colspan="4" style="${tdS};background:#1f4e78;color:#fff;font-size:15px;font-weight:bold;padding:8px">Merifarm — ${esc(title)}</td></tr>
-          <tr><td colspan="4" style="${tdS};background:#ddebf7;font-size:14px;font-weight:bold">Добавувач: ${esc(d||'(без добавувач)')}</td></tr>
-          <tr><td colspan="2" style="${tdS};background:#f2f2f2">Артикли: <b>${g.length}</b> · парчиња: <b>${fmt1(g.reduce((a,x)=>a+ +x.kolicina,0))}</b></td><td colspan="2" style="${tdS};background:#f2f2f2;text-align:right">Печатено: ${today}${pgs>1?' · стр. '+pg+'/'+pgs:''}</td></tr></table>
-          <table style="width:100%;border-collapse:collapse"><tr><th style="${tdS};background:#d9e1f2;text-align:center;width:28px">#</th><th style="${tdS};background:#d9e1f2;text-align:left;width:70px">Шифра</th><th style="${tdS};background:#d9e1f2;text-align:left">Артикл</th><th style="${tdS};background:#d9e1f2;text-align:right;width:70px">Количина</th><th style="${tdS};background:#d9e1f2;text-align:center;width:60px">✓</th></tr>
-          ${chunk.map((x,k)=>`<tr style="background:${(i+k)%2?'#fafafa':'#fff'}"><td style="${tdS};text-align:center;color:#666">${i+k+1}</td><td style="${tdS};font-family:Consolas,monospace">${x.sifra}</td><td style="${tdS}">${esc(x.ime)}</td><td style="${tdS};text-align:right;font-weight:bold;font-size:13px">${fmt1(x.kolicina)}</td><td style="${tdS}"></td></tr>`).join('')}
-          ${i+PER>=g.length?`<tr><td colspan="3" style="${tdS};background:#f2f2f2;font-weight:bold;text-align:right">Вкупно</td><td style="${tdS};background:#f2f2f2;font-weight:bold;text-align:right">${fmt1(g.reduce((a,x)=>a+ +x.kolicina,0))}</td><td style="${tdS};background:#f2f2f2"></td></tr>`:''}</table>`); } }
-    dl(filename, pdf.output('blob')); msgEl.textContent=`PDF е подготвен (${suppliers.length} добавувачи, ${page} стр.)`;
+    const list=items.filter(i=>suppliers.includes(i.dobavuvac||'')).sort((a,b)=>(a.dobavuvac||'').localeCompare(b.dobavuvac||'')||a.ime.localeCompare(b.ime));
+    const PER=40; const pgs=Math.ceil(list.length/PER); const today=new Date().toLocaleDateString('mk-MK');
+    for(let i=0;i<list.length;i+=PER){ const chunk=list.slice(i,i+PER); const pg=Math.floor(i/PER)+1;
+      await render(`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><b style="font-size:15px">Merifarm — ${esc(title)}</b><span style="font-size:11px">${list.length} артикли · ${suppliers.length} добавувачи · ${today} · стр. ${pg}/${pgs}</span></div>
+        <table style="width:100%;border-collapse:collapse"><tr><th style="${td};text-align:left;width:64px;background:#d9d9d9">Шифра</th><th style="${td};text-align:left;background:#d9d9d9">Артикл</th><th style="${td};text-align:right;width:64px;background:#d9d9d9">Количина</th><th style="${td};text-align:left;width:170px;background:#d9d9d9">Добавувач</th><th style="${td};width:34px;background:#d9d9d9"></th></tr>
+        ${chunk.map((x,k)=>{ const prev=(i+k)>0?list[i+k-1]:null; const nd=!prev||(prev.dobavuvac||'')!==(x.dobavuvac||''); return `<tr><td style="${td};font-family:Consolas,monospace">${x.sifra}</td><td style="${td}">${esc(x.ime)}</td><td style="${td};text-align:right;font-weight:bold">${fmt1(x.kolicina)}</td><td style="${td}${nd?';font-weight:bold':''}">${esc(x.dobavuvac||'(без добавувач)')}</td><td style="${td}"></td></tr>`; }).join('')}
+        ${pg===pgs?`<tr><td colspan="2" style="${td};font-weight:bold;text-align:right;background:#f2f2f2">Вкупно</td><td style="${td};text-align:right;font-weight:bold;background:#f2f2f2">${fmt1(list.reduce((a,x)=>a+ +x.kolicina,0))}</td><td colspan="2" style="${td};background:#f2f2f2"></td></tr>`:''}</table>`); }
+    dl(filename, pdf.output('blob')); msgEl.textContent=`PDF е подготвен (${list.length} артикли, ${page} стр.)`;
   }catch(e){ msgEl.textContent='Грешка: '+(e.message||e); }
 }
 async function makePdf(title, rows, head, filename, msgEl){
