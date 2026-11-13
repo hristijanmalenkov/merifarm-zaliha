@@ -119,6 +119,8 @@ svg{display:block;width:100%;height:auto;max-width:100%}
 .subgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px}
 .tab{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--muted);font:500 14px var(--sans);padding:8px 14px;border-radius:999px;cursor:pointer}
+.mism{background:#fff6e0;border:1px solid #f0d48a;color:#6b4e00;border-radius:8px;padding:8px 10px;margin-bottom:10px}
+.mismc{color:#a06a00;font-weight:600;white-space:nowrap}
 .tab.on{background:var(--accent-soft);color:var(--accent);border-color:transparent}
 textarea{width:100%;min-height:72px;resize:vertical}
 .note{white-space:pre-wrap;font-size:14px}
@@ -701,7 +703,7 @@ let PTAB='proverki';
 async function viewProverki(){
   main.innerHTML='<div class="empty">Ги распоредувам продажбите по рокови…</div>';
   await sql(`select fefo_apply()`);
-  const [al,pend,exp,hist,[cnt]]=await Promise.all([sql(`select a.id,a.sifra,a.tip,a.poraka,a.datum,a.lot_id,ar.ime,l.rok,l.pocetna,(select coalesce(sum(kolicina),0) from lots where sifra=a.sifra and status='aktivna' and id<>coalesce(a.lot_id,0)) ostanato_drugi from lot_alerts a join articles ar on ar.sifra=a.sifra left join lots l on l.id=a.lot_id where a.status='otvoren' order by a.datum, ar.ime`),sql(`select p.id,p.sifra,p.kolicina,p.datum,ar.ime,r.broj,s.ime dobavuvac from lot_pending p join articles ar on ar.sifra=p.sifra left join receipts r on r.id=p.receipt_id left join suppliers s on s.id=r.supplier_id where p.status='ceka' order by p.datum, ar.ime`),sql(`select l.sifra,l.ime,l.rok,l.kolicina,l.dena_do_rok from lot_overview l where l.kolicina>0 order by l.rok limit 300`),sql(`select a.datum,a.resolved_at,ar.ime,a.sifra,a.poraka,a.status,a.odgovor from lot_alerts a join articles ar on ar.sifra=a.sifra where a.status<>'otvoren' order by a.resolved_at desc limit 50`),sql(`select (select count(*) from lot_state) sledeni, (select count(*) from lot_overview where kolicina>0) serii`)]);
+  const [al,pend,exp,hist,[cnt],mism]=await Promise.all([sql(`select a.id,a.sifra,a.tip,a.poraka,a.datum,a.lot_id,ar.ime,l.rok,l.pocetna,(select coalesce(sum(kolicina),0) from lots where sifra=a.sifra and status='aktivna' and id<>coalesce(a.lot_id,0)) ostanato_drugi from lot_alerts a join articles ar on ar.sifra=a.sifra left join lots l on l.id=a.lot_id where a.status='otvoren' order by a.datum, ar.ime`),sql(`select p.id,p.sifra,p.kolicina,p.datum,ar.ime,r.broj,s.ime dobavuvac from lot_pending p join articles ar on ar.sifra=p.sifra left join receipts r on r.id=p.receipt_id left join suppliers s on s.id=r.supplier_id where p.status='ceka' order by p.datum, ar.ime`),sql(`select l.sifra,l.ime,l.rok,l.kolicina,l.dena_do_rok from lot_overview l where l.kolicina>0 order by l.rok limit 300`),sql(`select a.datum,a.resolved_at,ar.ime,a.sifra,a.poraka,a.status,a.odgovor from lot_alerts a join articles ar on ar.sifra=a.sifra where a.status<>'otvoren' order by a.resolved_at desc limit 50`),sql(`select (select count(*) from lot_state) sledeni, (select count(*) from lot_overview where kolicina>0) serii`),sql(`select * from lot_mismatch where abs(razlika)>=1 order by ime`)]);
   const tabs=[['proverki',`Проверки (${al.length})`],['cekanje',`На чекање за рок (${pend.length})`],['rokovi','Листа на рокови'],['tabela','Табела за внес'],['istorija','Историја']];
   const bucket=d=>d<0?'истечен':d<=90?'до 3 мес.':d<=180?'до 6 мес.':d<=365?'до 12 мес.':'над 12 мес.';
   main.innerHTML=`<h1>Рокови</h1><p class="sub">${cnt.sledeni} артикли со следење на рокови · ${cnt.serii} активни серии · продажбата се распоредува по принцип „најкраток рок прв“</p>
@@ -722,6 +724,9 @@ async function viewProverki(){
       ${pend.length?pend.map(p=>`<tr id="pd${p.id}"><td>${esc(p.datum||'')}</td><td><a class="art" href="#a${p.sifra}">${esc(p.ime)}</a><div class="code">${p.sifra}</div></td><td><span class="code">${esc(p.broj||'')}</span><div class="hint">${esc(p.dobavuvac||'')}</div></td><td class="n">${fmt1(p.kolicina)}</td><td><input class="rok" placeholder="ММ.ГГГГ" style="width:110px"></td><td><button class="btn" data-pend="${p.id}">Запиши</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Нема пратки на чекање</td></tr>'}</table></div>
     </div>
     <div id="tab-rokovi" ${PTAB!=='rokovi'?'hidden':''}>
+      ${mism.length?`<details class="card" style="margin-bottom:12px;border-left:4px solid var(--warn,#c98a00)"><summary style="cursor:pointer"><b>⚠ Несовпаѓање рокови / залиха: ${mism.length} артикли</b> <span class="hint">— само знак, залихата не се менува</span></summary>
+        <div class="twrap" style="margin-top:8px"><table><tr><th>Артикл</th><th class="n">Во рокови</th><th class="n">Без рок</th><th class="n">Во систем</th><th class="n">Разлика</th></tr>
+        ${mism.map(m=>`<tr><td><a class="art" href="#a${m.sifra}">${esc(m.ime)}</a><div class="code">${m.sifra}</div></td><td class="n">${fmt1(m.vo_rokovi)}</td><td class="n">${+m.bez_rok?fmt1(m.bez_rok):''}</td><td class="n">${fmt1(m.zaliha)}</td><td class="n"><b>${+m.razlika>0?'+':''}${fmt1(m.razlika)}</b></td></tr>`).join('')}</table></div></details>`:''}
       <div class="tiles" style="margin-bottom:12px">${['истечен','до 3 мес.','до 6 мес.','до 12 мес.','над 12 мес.'].map(b=>{const x=exp.filter(e=>bucket(+e.dena_do_rok)===b); return `<div class="tile${b==='истечен'?' bad':b==='до 3 мес.'?' warn':''}"><div class="l">${b}</div><div class="v">${x.length}<small>серии · ${fmt(x.reduce((s,e)=>s+ +e.kolicina,0))} парч.</small></div></div>`;}).join('')}</div>
       <div class="card twrap"><table><tr><th>Рок</th><th>Артикл</th><th class="n">Кол.</th><th class="n">Дена</th></tr>
       ${exp.length?exp.map(e=>`<tr${+e.dena_do_rok<=90?' style="color:var(--bad)"':''}><td>${rokFmt(e.rok)}</td><td><a class="art" href="#a${e.sifra}">${esc(e.ime)}</a><div class="code">${e.sifra}</div></td><td class="n">${fmt1(e.kolicina)}</td><td class="n">${fmt(e.dena_do_rok)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Уште нема внесени рокови. Внеси контрола на страницата на артикл или преку Excel.</td></tr>'}</table></div>
@@ -784,13 +789,13 @@ async function rtSearch(){ const mode=document.getElementById('rtmode').value, v
     cond=`a.sifra in (select at.sifra from article_tags at join tags t on t.id=at.tag_id where t.id=${+t.id} or t.parent_id=${+t.id})`; }
   const z=document.getElementById('rtz').checked?'and coalesce(st.zaliha,0)>0':'';
   msg.textContent='Барам…';
-  try{ const [rows,[d]]=await Promise.all([sql(`select a.sifra,a.ime,coalesce(st.zaliha,0) zaliha,(select string_agg(to_char(l.rok,'MM.YYYY')||' – '||l.kolicina::float,', ' order by l.rok) from lots l where l.sifra=a.sifra and l.status='aktivna') serii from articles a left join article_stats st on st.sifra=a.sifra where a.aktiven and ${cond} ${z} order by a.ime limit 3000`),sql(`select to_char(max(datum),'DD.MM.YYYY') d from stock_snapshots`)]);
+  try{ const [rows,[d]]=await Promise.all([sql(`select a.sifra,a.ime,coalesce(st.zaliha,0) zaliha,(select string_agg(to_char(l.rok,'MM.YYYY')||' – '||l.kolicina::float,', ' order by l.rok) from lots l where l.sifra=a.sifra and l.status='aktivna') serii,(select m.razlika from lot_mismatch m where m.sifra=a.sifra and abs(m.razlika)>=1) mism from articles a left join article_stats st on st.sifra=a.sifra where a.aktiven and ${cond} ${z} order by a.ime limit 3000`),sql(`select to_char(max(datum),'DD.MM.YYYY') d from stock_snapshots`)]);
     RT.rows=rows; RT.title=title; RT.zdat=d.d; msg.textContent='';
     if(!rows.length){ res.innerHTML='<div class="empty">Нема артикли за ова барање.</div>'; return; }
     res.innerHTML=`<div class="inline" style="flex-wrap:wrap;gap:8px;margin-bottom:8px"><b id="rtcnt">${rows.length}</b> артикли · залиха од извештај ${d.d}
       <button class="btn" id="rtxls">⬇ Excel</button><button class="btn sec" id="rtpdf">⬇ PDF</button><span id="rtout" class="hint"></span></div>
       <div class="twrap" style="max-height:460px;overflow:auto"><table><tr><th style="width:28px"><input type="checkbox" id="rtall" checked></th><th>Шифра</th><th>Артикл</th><th class="n">Залиха</th><th>Внесени рокови</th></tr>
-      ${rows.map((r,i)=>`<tr><td><input type="checkbox" class="rtc" data-i="${i}" checked></td><td class="code">${r.sifra}</td><td><a class="art" href="#a${r.sifra}">${esc(r.ime)}</a></td><td class="n">${fmt1(r.zaliha)}</td><td class="hint">${esc(r.serii||'')}</td></tr>`).join('')}</table></div>`;
+      ${rows.map((r,i)=>`<tr><td><input type="checkbox" class="rtc" data-i="${i}" checked></td><td class="code">${r.sifra}</td><td><a class="art" href="#a${r.sifra}">${esc(r.ime)}</a></td><td class="n">${fmt1(r.zaliha)}</td><td class="hint">${esc(r.serii||'')}${r.mism!=null?` <span class="mismc" title="Рокови и залиха не се совпаѓаат">⚠ ${+r.mism>0?'+':''}${fmt1(r.mism)}</span>`:''}</td></tr>`).join('')}</table></div>`;
     const cnt=()=>document.getElementById('rtcnt').textContent=rtSel().length;
     document.getElementById('rtall').onchange=e=>{ res.querySelectorAll('.rtc').forEach(c=>c.checked=e.target.checked); cnt(); };
     res.querySelectorAll('.rtc').forEach(c=>c.onchange=cnt);
@@ -819,7 +824,7 @@ async function rtExcel(out){ const rows=rtSel(); if(!rows.length){ out.textConte
       ws.getCell(n,10).value={formula:`IF(COUNT(D${n},F${n},H${n})=0,"",SUM(D${n},F${n},H${n}))`};
       ws.getCell(n,11).value={formula:`IF(J${n}="","",J${n}-C${n})`};
       [10,11].forEach(k=>Object.assign(ws.getCell(n,k),{font:A,border:B,fill:grey,numFmt:'#,##0.##;-#,##0.##;0'}));
-      const z=ws.getCell(n,12); z.border=B; z.font={name:'Arial',size:8,color:{argb:'FF808080'}}; if(r.serii) z.value='веќе внесено: '+r.serii;
+      const z=ws.getCell(n,12); z.border=B; z.font={name:'Arial',size:8,color:{argb:'FF808080'}}; if(r.serii) z.value='веќе внесено: '+r.serii+(r.mism!=null?` · ⚠ несовпаѓање ${+r.mism>0?'+':''}${fmt1(r.mism)}`:'');
       ['E','G','I'].forEach(col=>ws.getCell(col+n).dataValidation={type:'custom',allowBlank:true,formulae:[`OR(${col}${n}="",AND(LEN(${col}${n})=7,MID(${col}${n},3,1)="."))`],showErrorMessage:true,errorTitle:'Рок',error:'Рок во формат ММ.ГГГГ, пр. 03.2027'}); });
     const last=4+rows.length; ws.autoFilter=`A4:L${last}`;
     ws.addConditionalFormatting({ref:`K5:K${last}`,rules:[{type:'expression',formulae:['AND(K5<>"",K5<>0)'],style:{font:{color:{argb:'FFC00000'},bold:true},fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFCE4E4'}}}}]});
@@ -877,8 +882,10 @@ function wireRokTabela(){ const mode=document.getElementById('rtmode'); if(!mode
   document.getElementById('rtfile').onchange=e=>rtUpload(e.target.files[0]); }
 function parseRok(v){ v=(v||'').trim(); let m=v.match(/^(\d{1,2})[.\/-](\d{4})$/); if(m) return `${m[2]}-${m[1].padStart(2,'0')}`; m=v.match(/^(\d{4})-(\d{2})$/); if(m) return v; m=v.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/); if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; return null; }
 function alertInline(el,msg){ let s=el.querySelector('.msg'); if(!s){ s=document.createElement('span'); s.className='msg'; el.appendChild(s);} toast(s,msg,true); }
-function lotsSection(sifra, lots, pend, state){
-  return `<div class="card">
+function mismBadge(m){ if(!m||Math.abs(+m.razlika)<1) return ''; const r=+m.razlika;
+  return `<div class="mism">⚠ <b>Несовпаѓање со залихата</b>: во рокови ${fmt1(m.vo_rokovi)}${+m.bez_rok?` + ${fmt1(m.bez_rok)} без рок`:''} · во систем ${fmt1(m.zaliha)} · разлика <b>${r>0?'+':''}${fmt1(r)}</b><div class="hint">Само знак — залихата не се менува и ова не е попис. Се трга кога ќе се внесе нова контрола што се совпаѓа.</div></div>`; }
+function lotsSection(sifra, lots, pend, state, mism){
+  return `<div class="card">${mismBadge(mism)}
     ${state?`<div class="hint" style="margin-bottom:8px">Продажбата е распоредена до ${esc(state.applied_through)}.</div>`:'<div class="hint" style="margin-bottom:8px">Овој артикл уште не се следи по рокови. Внеси ја првата контрола подолу.</div>'}
     <div class="twrap"><table><tr><th>Рок</th><th class="n">Останато</th><th class="n">Почетно</th><th class="n">Продадено</th><th class="n">Дена до рок</th><th>Извор</th></tr>
     ${lots.length?lots.map(l=>`<tr${+l.dena_do_rok<=90?' style="color:var(--bad)"':''}><td>${rokFmt(l.rok)}</td><td class="n"><b>${fmt1(l.kolicina)}</b></td><td class="n">${fmt1(l.pocetna)}</td><td class="n">${fmt1(l.potroseno)}</td><td class="n">${fmt(l.dena_do_rok)}</td><td class="hint">${l.izvor==='priem'?'приемен лист':'контрола'} ${esc(l.datum_priem||'')}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">Нема активни серии</td></tr>'}
@@ -1019,7 +1026,7 @@ async function viewArtikal(sifra){
   const nab=await sql(`select r.datum,r.broj,r.br_faktura,s.ime dobavuvac,s.id sid,ri.kol,ri.nab_cena,round(ri.nab_cena*(1+coalesce(ri.ddv_stapka,0)/100),2) so_ddv,ri.prod_cena from receipt_items ri join receipts r on r.id=ri.receipt_id left join suppliers s on s.id=r.supplier_id where ri.sifra='${sifra}' order by r.datum desc, r.id desc limit 40`);
   const last=nab[0];
   const rshRows=await sql(`select datum,dokument,kolicina,vrednost from rashod where sifra='${sifra}' order by datum desc limit 20`);
-  const [lots,pendA,[lstate]]=await Promise.all([sql(`select * from lot_overview where sifra='${sifra}' and status='aktivna' order by rok`),sql(`select id,kolicina,datum from lot_pending where sifra='${sifra}' and status='ceka' order by datum`),sql(`select applied_through from lot_state where sifra='${sifra}'`)]);
+  const [lots,pendA,[lstate],[lmism]]=await Promise.all([sql(`select * from lot_overview where sifra='${sifra}' and status='aktivna' order by rok`),sql(`select id,kolicina,datum from lot_pending where sifra='${sifra}' and status='ceka' order by datum`),sql(`select applied_through from lot_state where sifra='${sifra}'`),sql(`select * from lot_mismatch where sifra='${sifra}'`)]);
   const dnevno=(+a.prod_90)/90; const pokrie=dnevno>0?Math.round((+a.zaliha||0)/dnevno):null;
   const per=[['7 дена',7],['30 дена',30],['90 дена',90],['6 мес.',182],['12 мес.',365]];
   const Y=yoyTable(yoy);
@@ -1045,7 +1052,7 @@ async function viewArtikal(sifra){
     <div class="card"><div class="cover">${per.map(([l,d])=>{const need=Math.ceil(dnevno*d); const ok=(+a.zaliha||0)>=need; return `<div class="${ok?'ok':'low'}"><div class="l">${l}</div><div class="v">${fmt(need)}</div></div>`;}).join('')}</div>
       <p class="hint" style="margin-top:10px">Зелено: моменталната залиха го покрива периодот. Црвено: недостига.</p></div>
     <h2>Продажба по месец, по години (парчиња)</h2><div class="card">${Y.chart}<div class="twrap" style="margin-top:10px">${Y.table}</div></div>
-    <h2>Рокови (серии)</h2>${lotsSection(sifra,lots,pendA,lstate)}
+    <h2>Рокови (серии)</h2>${lotsSection(sifra,lots,pendA,lstate,lmism)}
     ${rshRows.length?`<h2>Расход (не е продажба)</h2><div class="card twrap rh"><table><tr><th>Датум</th><th>Документ</th><th class="n">Кол.</th><th class="n">Вредност</th></tr>${rshRows.map(r=>`<tr class="rh"><td>${esc(r.datum)}</td><td>${esc(r.dokument)}</td><td class="n">${fmt1(r.kolicina)}</td><td class="n">${fmt2(r.vrednost)}</td></tr>`).join('')}</table><p class="hint" style="margin:8px 0 0">Овие количини се одземени од продажбата за тој ден.</p></div>`:''}
     <h2>Влезови (набавки)</h2><div class="card twrap"><table><tr><th>Датум</th><th>Добавувач</th><th>Приемен лист / фактура</th><th class="n">Кол.</th><th class="n">Наб. без ДДВ</th><th class="n">Наб. со ДДВ</th><th class="n">Прод. цена</th></tr>
       ${nab.length?nab.map(r=>`<tr><td>${esc(r.datum)}</td><td>${r.sid?`<a class="art" href="#d${r.sid}">${esc(r.dobavuvac)}</a>`:'—'}</td><td><span class="code">${esc(r.broj)}${r.br_faktura?' · ф. '+esc(r.br_faktura):''}</span></td><td class="n">${fmt1(r.kol)}</td><td class="n">${fmt2(r.nab_cena)}</td><td class="n">${fmt2(r.so_ddv)}</td><td class="n">${fmt2(r.prod_cena)}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Нема увезени влезови за овој артикл</td></tr>'}</table></div>
