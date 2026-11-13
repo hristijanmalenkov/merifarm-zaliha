@@ -857,7 +857,7 @@ async function rtUpload(f){ const out=document.getElementById('rtup'), prev=docu
     const kc=[], rc=[]; hdr.forEach((h,k)=>{ if(/^Кол\./.test(h)) kc.push(k); if(/^Рок/.test(h)) rc.push(k); });
     const lines=[], errs=[], arts=new Set(); let cur=null;
     for(let n=5;n<=ws.rowCount;n++){ const row=ws.getRow(n); let s=row.getCell(1).value; s=s==null?'':String(s.text||s).trim(); if(/^\d+$/.test(s)) s=s.padStart(6,'0'); if(s) cur=s; if(!cur) continue;
-      kc.forEach((k,j)=>{ let q=row.getCell(k).value, r=row.getCell(rc[j]).value; if(q&&typeof q==='object') q=q.result; if((q==null||q==='')&&(r==null||r==='')) return;
+      kc.forEach((k,j)=>{ let q=row.getCell(k).value, r=row.getCell(rc[j]).value; if(q&&typeof q==='object') q=q.result; if((q==null||q===''||+q===0)&&(r==null||r==='')) return;
         const rok=rtRok(r); if(q==null||q===''||isNaN(+q)||!rok){ errs.push(`ред ${n} (${cur}): провери количина/рок`); return; }
         lines.push(`${cur}|${+q}|${rok}|${datum}`); arts.add(cur); }); }
     out.textContent='';
