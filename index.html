@@ -702,7 +702,7 @@ async function viewProverki(){
   main.innerHTML='<div class="empty">Ги распоредувам продажбите по рокови…</div>';
   await sql(`select fefo_apply()`);
   const [al,pend,exp,hist,[cnt]]=await Promise.all([sql(`select a.id,a.sifra,a.tip,a.poraka,a.datum,a.lot_id,ar.ime,l.rok,l.pocetna,(select coalesce(sum(kolicina),0) from lots where sifra=a.sifra and status='aktivna' and id<>coalesce(a.lot_id,0)) ostanato_drugi from lot_alerts a join articles ar on ar.sifra=a.sifra left join lots l on l.id=a.lot_id where a.status='otvoren' order by a.datum, ar.ime`),sql(`select p.id,p.sifra,p.kolicina,p.datum,ar.ime,r.broj,s.ime dobavuvac from lot_pending p join articles ar on ar.sifra=p.sifra left join receipts r on r.id=p.receipt_id left join suppliers s on s.id=r.supplier_id where p.status='ceka' order by p.datum, ar.ime`),sql(`select l.sifra,l.ime,l.rok,l.kolicina,l.dena_do_rok from lot_overview l where l.kolicina>0 order by l.rok limit 300`),sql(`select a.datum,a.resolved_at,ar.ime,a.sifra,a.poraka,a.status,a.odgovor from lot_alerts a join articles ar on ar.sifra=a.sifra where a.status<>'otvoren' order by a.resolved_at desc limit 50`),sql(`select (select count(*) from lot_state) sledeni, (select count(*) from lot_overview where kolicina>0) serii`)]);
-  const tabs=[['proverki',`Проверки (${al.length})`],['cekanje',`На чекање за рок (${pend.length})`],['rokovi','Листа на рокови'],['istorija','Историја']];
+  const tabs=[['proverki',`Проверки (${al.length})`],['cekanje',`На чекање за рок (${pend.length})`],['rokovi','Листа на рокови'],['tabela','Табела за внес'],['istorija','Историја']];
   const bucket=d=>d<0?'истечен':d<=90?'до 3 мес.':d<=180?'до 6 мес.':d<=365?'до 12 мес.':'над 12 мес.';
   main.innerHTML=`<h1>Рокови</h1><p class="sub">${cnt.sledeni} артикли со следење на рокови · ${cnt.serii} активни серии · продажбата се распоредува по принцип „најкраток рок прв“</p>
     <div class="tabs">${tabs.map(([k,l])=>`<button class="tab${PTAB===k?' on':''}" data-tab="${k}">${l}</button>`).join('')}</div>
@@ -726,9 +726,11 @@ async function viewProverki(){
       <div class="card twrap"><table><tr><th>Рок</th><th>Артикл</th><th class="n">Кол.</th><th class="n">Дена</th></tr>
       ${exp.length?exp.map(e=>`<tr${+e.dena_do_rok<=90?' style="color:var(--bad)"':''}><td>${rokFmt(e.rok)}</td><td><a class="art" href="#a${e.sifra}">${esc(e.ime)}</a><div class="code">${e.sifra}</div></td><td class="n">${fmt1(e.kolicina)}</td><td class="n">${fmt(e.dena_do_rok)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Уште нема внесени рокови. Внеси контрола на страницата на артикл или преку Excel.</td></tr>'}</table></div>
     </div>
+    <div id="tab-tabela" ${PTAB!=='tabela'?'hidden':''}>${rtHtml()}</div>
     <div id="tab-istorija" ${PTAB!=='istorija'?'hidden':''}><div class="card twrap"><table><tr><th>Кога</th><th>Артикл</th><th>Проверка</th><th>Одговор</th></tr>
       ${hist.length?hist.map(h=>`<tr><td>${esc((h.resolved_at||'').slice(0,10))}</td><td><a class="art" href="#a${h.sifra}">${esc(h.ime)}</a></td><td class="hint">${esc(h.poraka)}</td><td>${h.status==='potvrden'?'<span class="up">✓ продадени</span>':h.status==='korigiran'?'<span class="down">✗ '+esc(h.odgovor)+'</span>':esc(h.status)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Празно</td></tr>'}</table></div></div>`;
   document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ PTAB=b.dataset.tab; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b)); tabs.forEach(([k])=>document.getElementById('tab-'+k).hidden=k!==PTAB); });
+  wireRokTabela();
   main.querySelectorAll('[data-ok]').forEach(b=>b.onclick=async()=>{ b.disabled=true; try{ await sql(`select alert_confirm(${+b.dataset.ok})`); document.getElementById('al'+b.dataset.ok).remove(); }catch(e){ toast(b.parentElement.querySelector('.msg'),e.message,true); b.disabled=false; } });
   main.querySelectorAll('[data-no]').forEach(b=>b.onclick=()=>{ const c=document.getElementById('al'+b.dataset.no).querySelector('.corr'); c.hidden=false; c.querySelector('.ost').focus(); });
   main.querySelectorAll('[data-fix]').forEach(b=>b.onclick=async()=>{ const card=document.getElementById('al'+b.dataset.fix); const v=card.querySelector('.ost').value; if(v==='') return; b.disabled=true;
@@ -743,6 +745,136 @@ body.auth header,body.auth main{display:none}
       ${pend.length?`<h1>Пратки без внесен рок</h1><table><tr><th>Датум</th><th>Шифра</th><th>Артикл</th><th>Кол.</th><th>Рок</th></tr>${pend.map(p=>`<tr><td>${p.datum||''}</td><td>${p.sifra}</td><td>${esc(p.ime)}</td><td>${fmt1(p.kolicina)}</td><td>____.______</td></tr>`).join('')}</table>`:''}</body></html>`;
     dl(`proverki-rokovi-${today}.html`, new Blob([html],{type:'text/html'})); };
 }
+/* ---------- Рокови: табела за внес (Excel / PDF) ---------- */
+const RT={rows:[],title:''};
+const CYR={'а':'a','б':'b','в':'v','г':'g','д':'d','ѓ':'gj','е':'e','ж':'zh','з':'z','ѕ':'dz','и':'i','ј':'j','к':'k','л':'l','љ':'lj','м':'m','н':'n','њ':'nj','о':'o','п':'p','р':'r','с':'s','т':'t','ќ':'kj','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','џ':'dz','ш':'sh'};
+const translit=w=>[...w.toLowerCase()].map(c=>CYR[c]??c).join('');
+const sqlLike=w=>w.replace(/'/g,"''").replace(/[%_\\]/g,m=>'\\'+m);
+function rtHtml(){ return `<div class="card">
+  <p class="hint" style="margin:0 0 10px">Избери артикли, прегледај ги и преземи табела за контрола на рокови како Excel или PDF. Пополнетиот Excel се враќа подолу со „Качи пополнета табела“.</p>
+  <div class="inline" style="flex-wrap:wrap;gap:8px">
+    <select id="rtmode"><option value="kw">Клучен збор / дел од име</option><option value="9">Бренд</option><option value="8">Збирен бренд</option><option value="1">Подгрупа</option><option value="list">Листа подготвена од Claude</option></select>
+    <input id="rtval" list="rtopts" placeholder="пр. исла" style="min-width:260px"><datalist id="rtopts"></datalist>
+    <label class="hint"><input type="checkbox" id="rtz" checked> само со залиха</label>
+    <button class="btn" id="rtgo">Прикажи</button><span id="rtmsg" class="hint"></span>
+  </div>
+  <div id="rtres" style="margin-top:12px"></div>
+  <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+  <div class="inline" style="flex-wrap:wrap;gap:8px"><b>Качи пополнета табела</b><input type="file" id="rtfile" accept=".xlsx"><span id="rtup" class="hint"></span></div>
+  <div id="rtprev" style="margin-top:10px"></div></div>`; }
+let RTTAGS=null, RTLISTS=null;
+async function rtOptions(){ const mode=document.getElementById('rtmode').value, inp=document.getElementById('rtval'), dlst=document.getElementById('rtopts');
+  inp.value=''; dlst.innerHTML='';
+  if(mode==='kw'){ inp.placeholder='пр. исла, brufen sirup, 027733'; return; }
+  if(mode==='list'){ inp.placeholder='избери листа';
+    try{ RTLISTS=RTLISTS||await sql(`select id,ime,opis,array_length(sifri,1) n,to_char(created_at,'DD.MM.YYYY') d from rok_lists order by created_at desc`); }catch(e){ RTLISTS=[]; }
+    dlst.innerHTML=RTLISTS.map(l=>`<option value="${esc(l.ime)}">${l.n} артикли · ${l.d}${l.opis?' · '+esc(l.opis):''}</option>`).join('');
+    if(!RTLISTS.length) document.getElementById('rtmsg').textContent='Уште нема листи. Кажи ми во разговор што ти треба (пр. „сите brufen сирупи“) и ќе ја подготвам тука.';
+    return; }
+  inp.placeholder='почни да пишуваш…';
+  RTTAGS=RTTAGS||await sql(`select t.id,t.ime,t.group_id,count(at.sifra) n from tags t left join article_tags at on at.tag_id=t.id where t.group_id in (1,8,9) group by 1,2,3 order by t.ime`);
+  dlst.innerHTML=RTTAGS.filter(t=>t.group_id==mode).map(t=>`<option value="${esc(t.ime)}">${t.n} артикли</option>`).join(''); }
+async function rtSearch(){ const mode=document.getElementById('rtmode').value, v=document.getElementById('rtval').value.trim(), msg=document.getElementById('rtmsg'), res=document.getElementById('rtres');
+  if(!v){ msg.textContent='Внеси вредност.'; return; }
+  let cond, title=v;
+  if(mode==='kw'){ const words=v.split(/\s+/).filter(Boolean);
+    cond=words.map(w=>{ const a=sqlLike(w), b=sqlLike(translit(w)); return `(a.ime ilike '%${a}%' or a.ime ilike '%${b}%' or a.sifra like '${a}%')`; }).join(' and '); }
+  else if(mode==='list'){ const l=(RTLISTS||[]).find(x=>x.ime===v); if(!l){ msg.textContent='Избери листа од понудените.'; return; } cond=`a.sifra = any((select sifri from rok_lists where id=${+l.id}))`; }
+  else { const t=(RTTAGS||[]).find(x=>x.group_id==mode&&x.ime===v); if(!t){ msg.textContent='Избери од понудените вредности.'; return; }
+    cond=`a.sifra in (select at.sifra from article_tags at join tags t on t.id=at.tag_id where t.id=${+t.id} or t.parent_id=${+t.id})`; }
+  const z=document.getElementById('rtz').checked?'and coalesce(st.zaliha,0)>0':'';
+  msg.textContent='Барам…';
+  try{ const [rows,[d]]=await Promise.all([sql(`select a.sifra,a.ime,coalesce(st.zaliha,0) zaliha,(select string_agg(to_char(l.rok,'MM.YYYY')||' – '||l.kolicina::float,', ' order by l.rok) from lots l where l.sifra=a.sifra and l.status='aktivna') serii from articles a left join article_stats st on st.sifra=a.sifra where a.aktiven and ${cond} ${z} order by a.ime limit 3000`),sql(`select to_char(max(datum),'DD.MM.YYYY') d from stock_snapshots`)]);
+    RT.rows=rows; RT.title=title; RT.zdat=d.d; msg.textContent='';
+    if(!rows.length){ res.innerHTML='<div class="empty">Нема артикли за ова барање.</div>'; return; }
+    res.innerHTML=`<div class="inline" style="flex-wrap:wrap;gap:8px;margin-bottom:8px"><b id="rtcnt">${rows.length}</b> артикли · залиха од извештај ${d.d}
+      <button class="btn" id="rtxls">⬇ Excel</button><button class="btn sec" id="rtpdf">⬇ PDF</button><span id="rtout" class="hint"></span></div>
+      <div class="twrap" style="max-height:460px;overflow:auto"><table><tr><th style="width:28px"><input type="checkbox" id="rtall" checked></th><th>Шифра</th><th>Артикл</th><th class="n">Залиха</th><th>Внесени рокови</th></tr>
+      ${rows.map((r,i)=>`<tr><td><input type="checkbox" class="rtc" data-i="${i}" checked></td><td class="code">${r.sifra}</td><td><a class="art" href="#a${r.sifra}">${esc(r.ime)}</a></td><td class="n">${fmt1(r.zaliha)}</td><td class="hint">${esc(r.serii||'')}</td></tr>`).join('')}</table></div>`;
+    const cnt=()=>document.getElementById('rtcnt').textContent=rtSel().length;
+    document.getElementById('rtall').onchange=e=>{ res.querySelectorAll('.rtc').forEach(c=>c.checked=e.target.checked); cnt(); };
+    res.querySelectorAll('.rtc').forEach(c=>c.onchange=cnt);
+    document.getElementById('rtxls').onclick=()=>rtExcel(document.getElementById('rtout'));
+    document.getElementById('rtpdf').onclick=()=>rtPdf(document.getElementById('rtout'));
+  }catch(e){ msg.textContent='Грешка: '+e.message; } }
+const rtSel=()=>[...document.querySelectorAll('#rtres .rtc')].filter(c=>c.checked).map(c=>RT.rows[+c.dataset.i]);
+const rtFile=ext=>`rokovi_${RT.title.replace(/[^\p{L}\p{N}]+/gu,'_')}_${new Date().toISOString().slice(0,10)}.${ext}`;
+async function rtExcel(out){ const rows=rtSel(); if(!rows.length){ out.textContent='Нема штиклирани артикли.'; return; }
+  try{ out.textContent='Правам Excel…';
+    await loadScript('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js');
+    const wb=new ExcelJS.Workbook(), ws=wb.addWorksheet('Внес',{views:[{state:'frozen',xSplit:2,ySplit:4}],pageSetup:{orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'4:4'}});
+    const A={name:'Arial',size:9}, thin={style:'thin',color:{argb:'FFBFBFBF'}}, B={top:thin,left:thin,bottom:thin,right:thin};
+    const yel={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF7CC'}}, grey={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}};
+    ws.getCell('A1').value=`Merifarm — внес на рокови: ${RT.title}`; ws.getCell('A1').font={name:'Arial',size:14,bold:true};
+    ws.getCell('A2').value='Датум на контрола:'; ws.getCell('A2').font={name:'Arial',bold:true};
+    Object.assign(ws.getCell('C2'),{fill:yel,border:B,numFmt:'dd.mm.yyyy'});
+    ws.getCell('E2').value=`Пополнувај само жолтите колони. Рок: ММ.ГГГГ (пр. 03.2027). Повеќе од 3 рока → нов ред, иста шифра. Залиха од извештај ${RT.zdat}.`; ws.getCell('E2').font={name:'Arial',size:9,italic:true,color:{argb:'FF595959'}};
+    const H=['Шифра','Артикл','Залиха','Кол. 1','Рок 1','Кол. 2','Рок 2','Кол. 3','Рок 3','Внесено','Разлика','Забелешка'], W=[9,52,8,8,9,8,9,8,9,9,9,28];
+    ws.columns=W.map(w=>({width:w}));
+    H.forEach((h,i)=>{ const c=ws.getCell(4,i+1); c.value=h; c.font={name:'Arial',bold:true,color:{argb:'FFFFFFFF'}}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1F3864'}}; c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; c.border=B; });
+    rows.forEach((r,i)=>{ const n=5+i;
+      const v=[r.sifra,r.ime,+r.zaliha]; v.forEach((x,k)=>{ const c=ws.getCell(n,k+1); c.value=x; c.font=A; c.border=B; });
+      ws.getCell(n,1).numFmt='@'; ws.getCell(n,3).numFmt='#,##0.##';
+      for(let k=4;k<=9;k++){ const c=ws.getCell(n,k); Object.assign(c,{fill:yel,border:B,font:A,numFmt:k%2?'@':'#,##0.##',alignment:{horizontal:'center'}}); }
+      ws.getCell(n,10).value={formula:`IF(COUNT(D${n},F${n},H${n})=0,"",SUM(D${n},F${n},H${n}))`};
+      ws.getCell(n,11).value={formula:`IF(J${n}="","",J${n}-C${n})`};
+      [10,11].forEach(k=>Object.assign(ws.getCell(n,k),{font:A,border:B,fill:grey,numFmt:'#,##0.##;-#,##0.##;0'}));
+      const z=ws.getCell(n,12); z.border=B; z.font={name:'Arial',size:8,color:{argb:'FF808080'}}; if(r.serii) z.value='веќе внесено: '+r.serii;
+      ['E','G','I'].forEach(col=>ws.getCell(col+n).dataValidation={type:'custom',allowBlank:true,formulae:[`OR(${col}${n}="",AND(LEN(${col}${n})=7,MID(${col}${n},3,1)="."))`],showErrorMessage:true,errorTitle:'Рок',error:'Рок во формат ММ.ГГГГ, пр. 03.2027'}); });
+    const last=4+rows.length; ws.autoFilter=`A4:L${last}`;
+    ws.addConditionalFormatting({ref:`K5:K${last}`,rules:[{type:'expression',formulae:['AND(K5<>"",K5<>0)'],style:{font:{color:{argb:'FFC00000'},bold:true},fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFCE4E4'}}}}]});
+    dl(rtFile('xlsx'), new Blob([await wb.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    out.textContent=`Excel е подготвен (${rows.length} артикли).`;
+  }catch(e){ out.textContent='Грешка: '+(e.message||e); } }
+async function rtPdf(out){ const rows=rtSel(); if(!rows.length){ out.textContent='Нема штиклирани артикли.'; return; }
+  try{ out.textContent='Правам PDF…';
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    const pdf=new window.jspdf.jsPDF({unit:'mm',format:'a4',orientation:'l'}); const PER=26, pgs=Math.ceil(rows.length/PER), today=new Date().toLocaleDateString('mk-MK');
+    const td='border:1px solid #000;padding:5px 6px;font:12px Calibri,Arial,sans-serif;vertical-align:middle', th=td+';background:#d9d9d9;font-weight:bold;text-align:center';
+    for(let i=0;i<rows.length;i+=PER){ const pg=i/PER+1;
+      const div=document.createElement('div'); div.style.cssText='position:fixed;left:-10000px;top:0;width:1123px;background:#fff;color:#000;padding:24px 28px;font:12px Calibri,Arial,sans-serif';
+      div.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><b style="font-size:16px">Merifarm — внес на рокови: ${esc(RT.title)}</b><span style="font-size:11px">${rows.length} артикли · залиха од ${RT.zdat} · датум на контрола: ____________ · стр. ${pg}/${pgs}</span></div>
+      <table style="width:100%;border-collapse:collapse"><tr><th style="${th};width:62px">Шифра</th><th style="${th};text-align:left">Артикл</th><th style="${th};width:56px">Залиха</th>${[1,2,3].map(k=>`<th style="${th};width:58px">Кол. ${k}</th><th style="${th};width:78px">Рок ${k}</th>`).join('')}</tr>
+      ${rows.slice(i,i+PER).map(r=>`<tr><td style="${td};font-family:Consolas,monospace">${r.sifra}</td><td style="${td}">${esc(r.ime)}</td><td style="${td};text-align:right;font-weight:bold">${fmt1(r.zaliha)}</td>${'<td style="'+td+'"></td>'.repeat(6)}</tr>`).join('')}</table>
+      <div style="font-size:10px;margin-top:6px;color:#444">Рок: ММ.ГГГГ (пр. 03.2027). Збирот на количините треба да е еднаков на залихата.</div>`;
+      document.body.appendChild(div); const cv=await html2canvas(div,{scale:2,backgroundColor:'#fff'}); div.remove();
+      if(i) pdf.addPage(); pdf.addImage(cv.toDataURL('image/jpeg',0.93),'JPEG',0,0,297,Math.min(cv.height*297/cv.width,210)); }
+    dl(rtFile('pdf'), pdf.output('blob')); out.textContent=`PDF е подготвен (${rows.length} артикли, ${pgs} стр.).`;
+  }catch(e){ out.textContent='Грешка: '+(e.message||e); } }
+function rtRok(v){ if(v==null||v==='') return null;
+  if(v instanceof Date) return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}`;
+  if(typeof v==='object'&&v.richText) v=v.richText.map(x=>x.text).join(''); if(typeof v==='object'&&v.text) v=v.text; if(typeof v==='object'&&v.result!=null) v=v.result;
+  if(typeof v==='number'){ const m=Math.floor(v), y=Math.round((v-m)*10000); return (m>=1&&m<=12&&y>2000)?`${y}-${String(m).padStart(2,'0')}`:null; }
+  const r=parseRok(String(v)); return r?r.slice(0,7):null; }
+async function rtUpload(f){ const out=document.getElementById('rtup'), prev=document.getElementById('rtprev'); prev.innerHTML=''; if(!f) return;
+  try{ out.textContent='Читам…';
+    await loadScript('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js');
+    const wb=new ExcelJS.Workbook(); await wb.xlsx.load(await f.arrayBuffer()); const ws=wb.getWorksheet('Внес')||wb.worksheets[0];
+    let dv=ws.getCell('C2').value, datum=new Date().toISOString().slice(0,10);
+    if(dv instanceof Date) datum=dv.toISOString().slice(0,10); else if(dv){ const p=parseRok(String(dv)); if(p&&p.length===10) datum=p; }
+    const hdr=[]; ws.getRow(4).eachCell((c,k)=>hdr[k]=String(c.value||''));
+    const kc=[], rc=[]; hdr.forEach((h,k)=>{ if(/^Кол\./.test(h)) kc.push(k); if(/^Рок/.test(h)) rc.push(k); });
+    const lines=[], errs=[], arts=new Set(); let cur=null;
+    for(let n=5;n<=ws.rowCount;n++){ const row=ws.getRow(n); let s=row.getCell(1).value; s=s==null?'':String(s.text||s).trim(); if(/^\d+$/.test(s)) s=s.padStart(6,'0'); if(s) cur=s; if(!cur) continue;
+      kc.forEach((k,j)=>{ let q=row.getCell(k).value, r=row.getCell(rc[j]).value; if(q&&typeof q==='object') q=q.result; if((q==null||q==='')&&(r==null||r==='')) return;
+        const rok=rtRok(r); if(q==null||q===''||isNaN(+q)||!rok){ errs.push(`ред ${n} (${cur}): провери количина/рок`); return; }
+        lines.push(`${cur}|${+q}|${rok}|${datum}`); arts.add(cur); }); }
+    out.textContent='';
+    if(!lines.length&&!errs.length){ prev.innerHTML='<div class="empty">Во табелата нема пополнети рокови.</div>'; return; }
+    prev.innerHTML=`<div class="card ${errs.length?'alert':''}"><b>${arts.size}</b> артикли · <b>${lines.length}</b> серии · датум на контрола ${datum.split('-').reverse().join('.')}
+      ${errs.length?`<div class="down" style="margin-top:6px">${errs.length} реда не се јасни и нема да се внесат:<br>${errs.slice(0,15).map(esc).join('<br>')}${errs.length>15?'<br>…':''}</div>`:''}
+      <div class="hint" style="margin-top:6px">Внесувањето ги заменува досегашните серии кај овие артикли.</div>
+      <div class="inline" style="margin-top:8px"><button class="btn" id="rtimp" ${lines.length?'':'disabled'}>Внеси во базата</button><span id="rtimsg"></span></div></div>`;
+    document.getElementById('rtimp').onclick=async e=>{ e.target.disabled=true; const m=document.getElementById('rtimsg');
+      try{ const [r]=await sql(`select import_lots($rt$${lines.join('\n')}$rt$) n`); toast(m,`Внесени ${r.n} серии кај ${arts.size} артикли.`); RTLISTS=null; setTimeout(()=>{ PTAB='rokovi'; route(); },1800); }
+      catch(err){ toast(m,err.message,true); e.target.disabled=false; } };
+  }catch(e){ out.textContent='Грешка: '+(e.message||e); } }
+function wireRokTabela(){ const mode=document.getElementById('rtmode'); if(!mode) return;
+  mode.onchange=rtOptions; rtOptions();
+  document.getElementById('rtgo').onclick=rtSearch;
+  document.getElementById('rtval').onkeydown=e=>{ if(e.key==='Enter') rtSearch(); };
+  document.getElementById('rtfile').onchange=e=>rtUpload(e.target.files[0]); }
 function parseRok(v){ v=(v||'').trim(); let m=v.match(/^(\d{1,2})[.\/-](\d{4})$/); if(m) return `${m[2]}-${m[1].padStart(2,'0')}`; m=v.match(/^(\d{4})-(\d{2})$/); if(m) return v; m=v.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/); if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; return null; }
 function alertInline(el,msg){ let s=el.querySelector('.msg'); if(!s){ s=document.createElement('span'); s.className='msg'; el.appendChild(s);} toast(s,msg,true); }
 function lotsSection(sifra, lots, pend, state){
