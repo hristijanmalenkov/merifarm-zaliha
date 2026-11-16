@@ -121,6 +121,11 @@ svg{display:block;width:100%;height:auto;max-width:100%}
 .tab{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--muted);font:500 14px var(--sans);padding:8px 14px;border-radius:999px;cursor:pointer}
 .mism{background:#fff6e0;border:1px solid #f0d48a;color:#6b4e00;border-radius:8px;padding:8px 10px;margin-bottom:10px}
 .mismc{color:#a06a00;font-weight:600;white-space:nowrap}
+.qn{display:flex;gap:3px;align-items:center}.qn input{width:100%;min-width:0}
+.nb{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:2px 4px;font-size:13px;line-height:1;cursor:pointer;opacity:.45;filter:grayscale(1)}
+.nb:hover{opacity:.9}.nb.on{opacity:1;filter:none;border-color:#7c3aed;background:rgba(124,58,237,.10)}
+.ntx{font-size:11.5px;color:#6d28d9;font-style:italic;text-align:left;white-space:normal;margin-top:2px}
+.npop{position:absolute;z-index:60;padding:10px;box-shadow:0 8px 24px rgba(0,0,0,.18)}.npop textarea{width:100%;box-sizing:border-box;font:14px var(--sans);padding:6px;border:1px solid var(--line);border-radius:6px;resize:vertical}
 .tab.on{background:var(--accent-soft);color:var(--accent);border-color:transparent}
 textarea{width:100%;min-height:72px;resize:vertical}
 .note{white-space:pre-wrap;font-size:14px}
@@ -343,6 +348,18 @@ async function loadDnevno(){
 }
 /* ---- Нарачка ---- */
 let NR={do:null,od:null,page:0};
+function notePop(anchor, val, title, onSave){ document.querySelectorAll('.npop').forEach(x=>x.remove());
+  const p=document.createElement('div'); p.className='npop card';
+  p.innerHTML=`<div class="hint" style="margin-bottom:6px">💬 Забелешка · <b>${esc(title)}</b></div><textarea rows="3" placeholder="пр. само ако има рабат, друго пакување, провери рок…">${esc(val)}</textarea>
+    <div class="inline" style="margin-top:8px;gap:6px"><button class="btn sv">Зачувај</button>${val?'<button class="btn sec dl">Избриши</button>':''}<button class="btn sec cx">Откажи</button><span class="hint">Ctrl+Enter зачувува · Esc затвора</span></div>`;
+  document.body.appendChild(p); const r=anchor.getBoundingClientRect(); const w=Math.min(340,window.innerWidth-16);
+  p.style.width=w+'px'; p.style.left=Math.max(8,Math.min(window.innerWidth-w-8,r.right-w))+'px'; p.style.top=(window.scrollY+r.bottom+6)+'px';
+  const ta=p.querySelector('textarea'); ta.focus(); ta.setSelectionRange(ta.value.length,ta.value.length);
+  const close=()=>{ p.remove(); document.removeEventListener('mousedown',outside); }; const outside=e=>{ if(!p.contains(e.target)&&e.target!==anchor) close(); };
+  setTimeout(()=>document.addEventListener('mousedown',outside),0);
+  const save=v=>{ close(); onSave(v.trim()); anchor.focus(); };
+  p.querySelector('.sv').onclick=()=>save(ta.value); p.querySelector('.cx').onclick=close; const d=p.querySelector('.dl'); if(d) d.onclick=()=>save('');
+  ta.onkeydown=e=>{ if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){ e.preventDefault(); save(ta.value);} else if(e.key==='Escape'){ close(); } }; }
 const NPAGE=300;
 async function loadNaracka(){
   const box=document.getElementById('naracka-box'); if(!box) return;
@@ -364,7 +381,7 @@ async function loadNaracka(){
     sql(`with r as (select a.sifra,a.ime,a.dobavuvac_sw dob,coalesce(st.zaliha,0) zaliha,st.prod_30,st.prod_90,st.prod_365,st.posledna_prodazba,c.cena_bez_ddv,
         coalesce((select sum(kolicina) from sales_daily s where s.sifra=a.sifra and s.datum>='${NR.od}'),0) period,
         case when coalesce(st.prod_90,0)>0 then st.prod_90/90.0 when coalesce(st.prod_365,0)>0 then st.prod_365/365.0 else 0 end rate,
-        ol.kolicina moja, ol.dobavuvac moj_dob,
+        ol.kolicina moja, ol.dobavuvac moj_dob, ol.zabeleska moja_zab,
         (select sum(kolicina) from rashod r where r.sifra=a.sifra and r.datum>=current_date-365) rashod365, (select max(datum) from rashod r where r.sifra=a.sifra) rashod_last,
         v.predlog, v.demand, v.safety, m.f, m.own_f, m.g_f, m.w, m.trend30, m.yoy, m.s30, m.s90, m.s_prev60, m.lani90, m.lani_t, m.spike, m.flags, m.rate mrate
       from articles a join article_stats st on st.sifra=a.sifra left join article_cost c on c.sifra=a.sifra left join order_lines ol on ol.sifra=a.sifra left join order_model m on m.sifra=a.sifra left join order_model_view('${NR.do}') v on v.sifra=a.sifra
@@ -387,9 +404,13 @@ async function loadNaracka(){
     <div class="inline hint" style="margin-top:8px;gap:14px"><span><b>Модел за ${days} д.:</b> ${fmt(MI.model_total)} парч.</span>${MI.lani_tempo_total!=null?`<span><b>Лани ист период × темпо:</b> ${fmt(MI.lani_tempo_total)} парч. (темпо ${MI.tempo>=1?'+':''}${fmt1((MI.tempo-1)*100)}% vs лани)</span><span><b>Разлика:</b> ${dif==null?'—':`<span class="${Math.abs(dif)<0.05?'up':'down'}">${dif>=0?'+':''}${fmt1(dif*100)}%</span>`}</span>`:''}${stale?'<span class="down">⚠ моделот се освежува во заднина — освежи за минута</span>':''}<span><b>Сезонски фактор:</b> ${fmt1(MI.gf*100)/100} (${MI.gf1??'·'} / ${MI.gf2??'·'} по години)</span><span><b>Тренд</b> = последни 30 д. vs претходни 60 · <b>Лани</b> = 90 д. vs ист период лани</span></div></div>
     <div class="inline" style="margin-bottom:8px"><span class="hint">${fmt(cnt.n)} артикли по азбучен ред · страница ${NR.page+1}/${pages}</span>${NR.page>0?'<button class="btn sec" id="nprev">←</button>':''}${NR.page<pages-1?'<button class="btn sec" id="nnext">→</button>':''}<input id="njump" placeholder="скок на буква/име" style="width:170px"></div>
     <datalist id="dobl">${dobs.map(d=>`<option value="${esc(d.d)}">`).join('')}</datalist>
-    <div class="card twrap" id="nrtable" style="padding:8px 10px"><table><colgroup><col><col style="width:62px"><col style="width:56px"><col style="width:88px"><col style="width:48px"><col style="width:56px"><col style="width:64px"><col style="width:190px"></colgroup><tr><th>Артикл</th><th class="n" title="Продажба ${NR.od.slice(8)}.${NR.od.slice(5,7)}–${last.slice(8)}.${last.slice(5,7)}">Прод.</th><th class="n">Зал.</th><th class="n" title="Тренд: последни 30 д. vs претходни 60 · Лани: 90 д. vs ист период лани">Тренд / лани</th><th class="n" title="Сезонски фактор">Сез.</th><th class="n">Предл.</th><th class="n">Нарачај</th><th>Добавувач</th></tr>
-      ${rows.map(r=>`<tr class="nr ${cls(r)}" data-s="${r.sifra}"><td><a class="art mini" href="#" data-mini="${r.sifra}">${esc(r.ime)}</a> <a class="plus" href="#a${r.sifra}" title="Отвори картичка">+</a><div class="code">${r.sifra}${r.dob?' · '+esc(r.dob):''}</div><div>${chips(r)}</div></td><td class="n">${fmt1(r.period)}</td><td class="n">${fmt1(r.zaliha)}</td><td class="n"><span class="tl"><small>30д</small>${trendTxt(r.trend30==null?null:+r.trend30)}</span><span class="tl"><small>лани</small>${trendTxt(r.yoy==null?null:+r.yoy)}</span></td><td class="n">${r.f!=null?fmt1(+r.f*100)/100:'·'}${r.own_f!=null&&+r.w>=0.2?'<span class="code">*</span>':''}</td><td class="n" title="${esc(r.predlog!=null?expl(r):'')}"><b>${fmt(r.predlog??0)}</b></td><td class="n"><input type="number" min="0" class="ol-k" value="${r.moja??0}" style="width:100%"></td><td><input class="ol-d" list="dobl" value="${esc(r.moj_dob??'')}" placeholder="${esc(r.dob||'')}" style="width:100%"></td></tr>`).join('')}
-    </table></div>`;
+    <div class="card twrap" id="nrtable" style="padding:8px 10px"><table><colgroup><col><col style="width:62px"><col style="width:56px"><col style="width:88px"><col style="width:48px"><col style="width:56px"><col style="width:96px"><col style="width:190px"></colgroup><tr><th>Артикл</th><th class="n" title="Продажба ${NR.od.slice(8)}.${NR.od.slice(5,7)}–${last.slice(8)}.${last.slice(5,7)}">Прод.</th><th class="n">Зал.</th><th class="n" title="Тренд: последни 30 д. vs претходни 60 · Лани: 90 д. vs ист период лани">Тренд / лани</th><th class="n" title="Сезонски фактор">Сез.</th><th class="n">Предл.</th><th class="n">Нарачај</th><th>Добавувач</th></tr>
+      ${rows.map(r=>`<tr class="nr ${cls(r)}" data-s="${r.sifra}" data-note="${esc(r.moja_zab||'')}"><td><a class="art mini" href="#" data-mini="${r.sifra}">${esc(r.ime)}</a> <a class="plus" href="#a${r.sifra}" title="Отвори картичка">+</a><div class="code">${r.sifra}${r.dob?' · '+esc(r.dob):''}</div><div>${chips(r)}</div></td><td class="n">${fmt1(r.period)}</td><td class="n">${fmt1(r.zaliha)}</td><td class="n"><span class="tl"><small>30д</small>${trendTxt(r.trend30==null?null:+r.trend30)}</span><span class="tl"><small>лани</small>${trendTxt(r.yoy==null?null:+r.yoy)}</span></td><td class="n">${r.f!=null?fmt1(+r.f*100)/100:'·'}${r.own_f!=null&&+r.w>=0.2?'<span class="code">*</span>':''}</td><td class="n" title="${esc(r.predlog!=null?expl(r):'')}"><b>${fmt(r.predlog??0)}</b></td><td class="n"><div class="qn"><input type="number" min="0" class="ol-k" value="${r.moja??0}"><button type="button" class="nb${r.moja_zab?' on':''}" title="${esc(r.moja_zab||'Додај забелешка')}" tabindex="-1">💬</button></div>${r.moja_zab?`<div class="ntx">${esc(r.moja_zab)}</div>`:''}</td><td><input class="ol-d" list="dobl" value="${esc(r.moj_dob??'')}" placeholder="${esc(r.dob||'')}" style="width:100%"></td></tr>`).join('')}
+    </table></div>
+    <div class="inline" style="margin-top:10px;justify-content:center;gap:10px"><span class="hint">страница ${NR.page+1}/${pages}</span>${NR.page>0?'<button class="btn sec" id="nprev2">← Претходна</button>':''}${NR.page<pages-1?'<button class="btn" id="nnext2">Следна страна →</button>':''}<button class="btn sec" id="ntop">↑ Горе</button></div>`;
+  const toTop=()=>document.getElementById('naracka-box').scrollIntoView({block:'start'});
+  document.getElementById('ntop').onclick=toTop;
+  const pv2=document.getElementById('nprev2'), nx2=document.getElementById('nnext2'); if(pv2) pv2.onclick=async()=>{NR.page--; await loadNaracka(); toTop();}; if(nx2) nx2.onclick=async()=>{NR.page++; await loadNaracka(); toTop();};
   document.getElementById('nrgo').onclick=()=>{ NR.do=document.getElementById('nrdo').value; NR.od=document.getElementById('nrod').value; NR.page=0; loadNaracka(); };
   const pv=document.getElementById('nprev'), nx=document.getElementById('nnext'); if(pv) pv.onclick=()=>{NR.page--; loadNaracka();}; if(nx) nx.onclick=()=>{NR.page++; loadNaracka();};
   document.getElementById('njump').onkeydown=async e=>{ if(e.key!=='Enter') return; const q=e.target.value.trim(); if(!q) return;
@@ -417,19 +438,24 @@ async function loadNaracka(){
     d.querySelector('.mute1').onclick=()=>{ MUTE[sf]=r.last; try{ localStorage.setItem('rashod_mute',JSON.stringify(MUTE)); }catch(e){} d.remove(); };
     document.body.appendChild(d); }
   box.querySelectorAll('.ol-k').forEach(inp=>inp.addEventListener('input',()=>{ if(+inp.value>0) paziRashod(inp.closest('tr').dataset.s); }));
+  const saveRow=async tr=>{ const sf=tr.dataset.s, k=tr.querySelector('.ol-k').value, d=tr.querySelector('.ol-d').value.trim(), z=(tr.dataset.note||'').trim();
+    try{ await sql((k===''||+k===0)&&!d&&!z?`delete from order_lines where sifra='${sf}'`:`insert into order_lines(sifra,kolicina,dobavuvac,zabeleska,updated_at) values ('${sf}',${k===''?'null':+k},${d?`'${sq(d)}'`:'null'},${z?`'${sq(z)}'`:'null'},now()) on conflict (sifra) do update set kolicina=excluded.kolicina,dobavuvac=excluded.dobavuvac,zabeleska=excluded.zabeleska,updated_at=now()`); tr.classList.add('saved'); setTimeout(()=>tr.classList.remove('saved'),800); }
+    catch(e){ document.getElementById('nrmsg').textContent='Грешка при чување: '+e.message; } };
   box.querySelectorAll('.ol-k,.ol-d').forEach(inp=>inp.addEventListener('input',()=>{ const tr=inp.closest('tr'); const sf=tr.dataset.s; clearTimeout(tmr[sf]);
-    tmr[sf]=setTimeout(async()=>{ const k=tr.querySelector('.ol-k').value, d=tr.querySelector('.ol-d').value.trim();
-      try{ await sql((k===''||+k===0)&&!d?`delete from order_lines where sifra='${sf}'`:`insert into order_lines(sifra,kolicina,dobavuvac,updated_at) values ('${sf}',${k===''?'null':+k},${d?`'${sq(d)}'`:'null'},now()) on conflict (sifra) do update set kolicina=excluded.kolicina,dobavuvac=excluded.dobavuvac,updated_at=now()`); tr.classList.add('saved'); setTimeout(()=>tr.classList.remove('saved'),800); }
-      catch(e){ document.getElementById('nrmsg').textContent='Грешка при чување: '+e.message; } },600); }));
+    tmr[sf]=setTimeout(()=>saveRow(tr),600); }));
+  box.querySelectorAll('.nb').forEach(b=>b.onclick=ev=>{ ev.preventDefault(); const tr=b.closest('tr'); notePop(b, tr.dataset.note||'', tr.querySelector('.art').textContent, async txt=>{
+      tr.dataset.note=txt; b.classList.toggle('on',!!txt); b.title=txt||'Додај забелешка';
+      const td=b.closest('td'); let nt=td.querySelector('.ntx'); if(txt){ if(!nt){ nt=document.createElement('div'); nt.className='ntx'; td.appendChild(nt);} nt.textContent=txt; } else if(nt) nt.remove();
+      await saveRow(tr); }); });
   document.getElementById('nrok').onclick=async()=>{ const b=document.getElementById('nrok'); b.disabled=true;
     const msg=document.getElementById('nrmsg'); msg.textContent='Потврдувам…';
     try{ const [cnt]=await sql(`select count(*) n from order_lines where kolicina>0`); if(!+cnt.n){ msg.textContent='Нема внесени количини во „Нарачај“.'; b.disabled=false; return; }
       const [r]=await sql(`select order_confirm('${NR.do}') id`); if(!r||!r.id) throw new Error('Потврдата не врати број на нарачка');
       msg.textContent=`Нарачката е потврдена (${cnt.n} артикли).`; setTimeout(()=>{ location.hash='o'+r.id; },300); }
     catch(e){ msg.innerHTML='<span class="down">Грешка при потврда: '+esc(e.message||e)+' — количините се сочувани, пробај пак.</span>'; b.disabled=false; } };
-  document.getElementById('nrpdf').onclick=async()=>{ const ol=await sql(`select o.sifra,a.ime,o.kolicina,coalesce(nullif(trim(o.dobavuvac),''),a.dobavuvac_sw) dob,st.zaliha from order_lines o join articles a on a.sifra=o.sifra left join article_stats st on st.sifra=o.sifra where o.kolicina>0 order by dob nulls last, a.ime`);
+  document.getElementById('nrpdf').onclick=async()=>{ const ol=await sql(`select o.sifra,a.ime,o.kolicina,o.zabeleska,coalesce(nullif(trim(o.dobavuvac),''),a.dobavuvac_sw) dob,st.zaliha from order_lines o join articles a on a.sifra=o.sifra left join article_stats st on st.sifra=o.sifra where o.kolicina>0 order by dob nulls last, a.ime`);
     if(!ol.length){ document.getElementById('nrmsg').textContent='Нема внесени количини во „Нарачај“.'; return; }
-    makePdf(`Нарачка до ${NR.do.split('-').reverse().join('.')}`, groupedRows(ol,r=>r.dob,r=>[r.sifra,r.ime,fmt1(r.zaliha),fmt(r.kolicina)]), ['Шифра','Артикл','Залиха','Нарачај'], `naracka-${NR.do}.pdf`, document.getElementById('nrmsg')); };
+    makePdf(`Нарачка до ${NR.do.split('-').reverse().join('.')}`, groupedRows(ol,r=>r.dob,r=>[r.sifra,r.ime,fmt1(r.zaliha),fmt(r.kolicina),r.zabeleska||'']), ['Шифра','Артикл','Залиха','Нарачај','Забелешка'], `naracka-${NR.do}.pdf`, document.getElementById('nrmsg')); };
 }
 /* ---- мини прозорче: картон (плочки + линија + година×месец) ---- */
 const MINI={};
@@ -479,12 +505,31 @@ async function makePdfExcel(title, suppliers, items, filename, msgEl){
     const PER=40; const pgs=Math.ceil(list.length/PER); const today=new Date().toLocaleDateString('mk-MK');
     for(let i=0;i<list.length;i+=PER){ const chunk=list.slice(i,i+PER); const pg=Math.floor(i/PER)+1;
       await render(`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px"><b style="font-size:15px">Merifarm — ${esc(title)}</b><span style="font-size:11px">${list.length} артикли · ${suppliers.length} добавувачи · ${today} · стр. ${pg}/${pgs}</span></div>
-        <table style="width:100%;border-collapse:collapse"><tr><th style="${td};text-align:left;width:64px;background:#d9d9d9">Шифра</th><th style="${td};text-align:left;background:#d9d9d9">Артикл</th><th style="${td};text-align:right;width:64px;background:#d9d9d9">Количина</th><th style="${td};text-align:left;width:170px;background:#d9d9d9">Добавувач</th><th style="${td};width:34px;background:#d9d9d9"></th></tr>
-        ${chunk.map((x,k)=>{ const prev=(i+k)>0?list[i+k-1]:null; const nd=!prev||(prev.dobavuvac||'')!==(x.dobavuvac||''); return `<tr><td style="${td};font-family:Consolas,monospace">${x.sifra}</td><td style="${td}">${esc(x.ime)}</td><td style="${td};text-align:right;font-weight:bold">${fmt1(x.kolicina)}</td><td style="${td}${nd?';font-weight:bold':''}">${esc(x.dobavuvac||'(без добавувач)')}</td><td style="${td}"></td></tr>`; }).join('')}
-        ${pg===pgs?`<tr><td colspan="2" style="${td};font-weight:bold;text-align:right;background:#f2f2f2">Вкупно</td><td style="${td};text-align:right;font-weight:bold;background:#f2f2f2">${fmt1(list.reduce((a,x)=>a+ +x.kolicina,0))}</td><td colspan="2" style="${td};background:#f2f2f2"></td></tr>`:''}</table>`); }
+        <table style="width:100%;border-collapse:collapse"><tr><th style="${td};text-align:left;width:64px;background:#d9d9d9">Шифра</th><th style="${td};text-align:left;background:#d9d9d9">Артикл</th><th style="${td};text-align:right;width:64px;background:#d9d9d9">Количина</th><th style="${td};text-align:left;width:150px;background:#d9d9d9">Забелешка</th><th style="${td};text-align:left;width:150px;background:#d9d9d9">Добавувач</th><th style="${td};width:34px;background:#d9d9d9"></th></tr>
+        ${chunk.map((x,k)=>{ const prev=(i+k)>0?list[i+k-1]:null; const nd=!prev||(prev.dobavuvac||'')!==(x.dobavuvac||''); return `<tr><td style="${td};font-family:Consolas,monospace">${x.sifra}</td><td style="${td}">${esc(x.ime)}</td><td style="${td};text-align:right;font-weight:bold">${fmt1(x.kolicina)}</td><td style="${td};font-style:italic">${esc(x.zabeleska||'')}</td><td style="${td}${nd?';font-weight:bold':''}">${esc(x.dobavuvac||'(без добавувач)')}</td><td style="${td}"></td></tr>`; }).join('')}
+        ${pg===pgs?`<tr><td colspan="2" style="${td};font-weight:bold;text-align:right;background:#f2f2f2">Вкупно</td><td style="${td};text-align:right;font-weight:bold;background:#f2f2f2">${fmt1(list.reduce((a,x)=>a+ +x.kolicina,0))}</td><td colspan="3" style="${td};background:#f2f2f2"></td></tr>`:''}</table>`); }
     dl(filename, pdf.output('blob')); msgEl.textContent=`PDF е подготвен (${list.length} артикли, ${page} стр.)`;
   }catch(e){ msgEl.textContent='Грешка: '+(e.message||e); }
 }
+async function makeXlsxOrder(title, suppliers, items, filename, msgEl){
+  try{ msgEl.textContent='Правам Excel…';
+    await loadScript('https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js');
+    const list=items.filter(i=>suppliers.includes(i.dobavuvac||'')).sort((a,b)=>(a.dobavuvac||'').localeCompare(b.dobavuvac||'')||a.ime.localeCompare(b.ime));
+    const wb=new ExcelJS.Workbook(), ws=wb.addWorksheet('Нарачка',{views:[{state:'frozen',ySplit:3}],pageSetup:{orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'3:3'}});
+    const thin={style:'thin',color:{argb:'FF000000'}}, B={top:thin,left:thin,bottom:thin,right:thin}, F={name:'Calibri',size:11};
+    ws.columns=[{width:10},{width:50},{width:11},{width:32},{width:28},{width:5}];
+    ws.getCell('A1').value=`Merifarm — ${title}`; ws.getCell('A1').font={name:'Calibri',size:14,bold:true};
+    ws.getCell('D1').value=`${list.length} артикли · ${suppliers.length} добавувачи · ${new Date().toLocaleDateString('mk-MK')}`; ws.getCell('D1').font={name:'Calibri',size:10,italic:true};
+    ['Шифра','Артикл','Количина','Забелешка','Добавувач','✓'].forEach((h,k)=>{ const c=ws.getCell(3,k+1); c.value=h; c.font={...F,bold:true}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9D9D9'}}; c.border=B; c.alignment={horizontal:k===2?'right':'left'}; });
+    list.forEach((x,i)=>{ const n=4+i, nd=!i||(list[i-1].dobavuvac||'')!==(x.dobavuvac||'');
+      [x.sifra,x.ime,+x.kolicina,x.zabeleska||'',x.dobavuvac||'(без добавувач)',''].forEach((v,k)=>{ const c=ws.getCell(n,k+1); c.value=v; c.font=F; c.border=B; });
+      ws.getCell(n,1).numFmt='@'; ws.getCell(n,3).font={...F,bold:true}; ws.getCell(n,3).numFmt='#,##0.##'; ws.getCell(n,4).font={...F,italic:true}; ws.getCell(n,4).alignment={wrapText:true,vertical:'top'}; if(nd) ws.getCell(n,5).font={...F,bold:true}; });
+    const t=4+list.length; ws.getCell(t,2).value='Вкупно'; ws.getCell(t,2).alignment={horizontal:'right'}; ws.getCell(t,3).value={formula:`SUM(C4:C${t-1})`};
+    for(let k=1;k<=6;k++){ const c=ws.getCell(t,k); c.border=B; c.font={...F,bold:true}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}}; }
+    ws.getCell(t,3).numFmt='#,##0.##';
+    dl(filename, new Blob([await wb.xlsx.writeBuffer()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    msgEl.textContent=`Excel е подготвен (${list.length} артикли).`;
+  }catch(e){ msgEl.textContent='Грешка: '+(e.message||e); } }
 async function makePdf(title, rows, head, filename, msgEl){
   try{
     msgEl.textContent='Правам PDF…';
@@ -637,7 +682,7 @@ async function viewNaracki(){
 async function viewNaracka(id){
   main.innerHTML='<div class="empty">Вчитувам нарачка…</div>';
   const [[o],items,alld]=await Promise.all([sql(`select * from orders where id=${+id}`),
-    sql(`select i.id,i.sifra,i.kolicina,i.dobavuvac,i.status,a.ime from order_items i join articles a on a.sifra=i.sifra where i.order_id=${+id} order by i.dobavuvac nulls last, a.ime`),
+    sql(`select i.id,i.sifra,i.kolicina,i.dobavuvac,i.status,i.zabeleska,a.ime from order_items i join articles a on a.sifra=i.sifra where i.order_id=${+id} order by i.dobavuvac nulls last, a.ime`),
     sql(`select d from (select dobavuvac_sw d from articles where dobavuvac_sw is not null union select ime from suppliers) x group by 1 order by 1`)]);
   if(!o){ main.innerHTML='<div class="empty">Нарачката не постои</div>'; return; }
   const groups={}; items.forEach(i=>{ const k=i.dobavuvac||''; (groups[k] ??= []).push(i); });
@@ -645,29 +690,33 @@ async function viewNaracka(id){
   const rest=alld.map(d=>d.d).filter(d=>!groups[d]);
   const key=d=>encodeURIComponent(d);
   main.innerHTML=`<a class="back" href="#naracki">← Нарачки</a><h1 style="margin-top:6px">${esc(o.naziv)}</h1><p class="sub">${esc(o.datum)} · ${items.length} артикли${o.do_datum?' · роба до '+esc(o.do_datum):''}</p>
-    <div class="inline" style="margin-bottom:10px"><button class="btn" id="pdfsel" style="background:#7c3aed">📄 PDF од штиклираните добавувачи</button><button class="btn sec" id="selall">Штиклирај сите</button><button class="btn sec" id="selnone">Ништо</button><button class="btn sec" id="pdfall">PDF — цела нарачка</button><span id="pdfallmsg" class="hint"></span></div>
+    <div class="inline" style="margin-bottom:10px"><button class="btn" id="pdfsel" style="background:#7c3aed">📄 PDF од штиклираните добавувачи</button><button class="btn" id="xlssel" style="background:#1f7a3a">📊 Excel од штиклираните</button><button class="btn sec" id="selall">Штиклирај сите</button><button class="btn sec" id="selnone">Ништо</button><button class="btn sec" id="pdfall">PDF — цела нарачка</button><span id="pdfallmsg" class="hint"></span></div>
     <h2>Добавувачи со артикли за нарачка</h2>
     <div class="card">${active.map(d=>{ const g=groups[d]; const done=g.filter(i=>i.status!=='ceka').length; const nema=g.filter(i=>i.status==='nema').length;
       return `<div class="inline" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><div><input type="checkbox" class="seld" data-d="${esc(d)}" style="width:20px;height:20px;vertical-align:middle;margin-right:8px"><a class="art" style="color:var(--good);font-size:16px" href="#oc${o.id}_${key(d)}">${d?esc(d):'(без добавувач)'}</a> <span class="hint">${g.length} артикли · ${done}/${g.length} проверени${nema?' · <span class="down">'+nema+' нема</span>':''}</span></div>
         <div class="inline"><button class="btn sec pdfd" data-d="${esc(d)}">PDF</button><a class="btn" href="#oc${o.id}_${key(d)}">Отвори</a></div></div>`; }).join('')}</div>
     <h2>Останати добавувачи</h2><div class="card"><div class="inline">${rest.map(d=>`<span class="chip" style="background:var(--line);color:var(--muted)">${esc(d)}</span>`).join('')}</div></div>
-    <h2>Сите артикли</h2><div class="card twrap"><table><tr><th>Артикл</th><th>Добавувач</th><th class="n">Кол.</th><th>Статус</th></tr>
-      ${items.map(i=>`<tr><td><a class="art" href="#a${i.sifra}">${esc(i.ime)}</a> <span class="code">${i.sifra}</span></td><td>${esc(i.dobavuvac||'')}</td><td class="n">${fmt1(i.kolicina)}</td><td>${i.status==='ima'?'<span class="up">✓ има</span>':i.status==='nema'?'<span class="down">✗ нема</span>':'<span class="hint">чека</span>'}</td></tr>`).join('')}</table></div>`;
-  document.getElementById('pdfall').onclick=()=>makePdf(`${o.naziv} · ${o.datum}`, groupedRows(items,i=>i.dobavuvac,i=>[i.sifra,i.ime,fmt1(i.kolicina)]), ['Шифра','Артикл','Количина'], `naracka-${o.datum}-site.pdf`, document.getElementById('pdfallmsg'));
+    <h2>Сите артикли</h2><div class="card twrap"><table><tr><th>Артикл</th><th>Добавувач</th><th class="n">Кол.</th><th>Забелешка</th><th>Статус</th></tr>
+      ${items.map(i=>`<tr><td><a class="art" href="#a${i.sifra}">${esc(i.ime)}</a> <span class="code">${i.sifra}</span></td><td>${esc(i.dobavuvac||'')}</td><td class="n">${fmt1(i.kolicina)}</td><td class="ntx">${esc(i.zabeleska||'')}</td><td>${i.status==='ima'?'<span class="up">✓ има</span>':i.status==='nema'?'<span class="down">✗ нема</span>':'<span class="hint">чека</span>'}</td></tr>`).join('')}</table></div>`;
+  document.getElementById('pdfall').onclick=()=>makePdf(`${o.naziv} · ${o.datum}`, groupedRows(items,i=>i.dobavuvac,i=>[i.sifra,i.ime,fmt1(i.kolicina),i.zabeleska||'']), ['Шифра','Артикл','Количина','Забелешка'], `naracka-${o.datum}-site.pdf`, document.getElementById('pdfallmsg'));
   document.getElementById('selall').onclick=()=>main.querySelectorAll('.seld').forEach(c=>c.checked=true);
   document.getElementById('selnone').onclick=()=>main.querySelectorAll('.seld').forEach(c=>c.checked=false);
   document.getElementById('pdfsel').onclick=()=>{ const sel=[...main.querySelectorAll('.seld:checked')].map(c=>c.dataset.d); const msg=document.getElementById('pdfallmsg');
     if(!sel.length){ msg.textContent='Штиклирај барем еден добавувач.'; return; }
     const list=items.filter(i=>sel.includes(i.dobavuvac||'')); const dd=o.datum.split('-').reverse().join('.');
     makePdfExcel(`Нарачка ${dd}`, sel, list, `naracka-${o.datum}-${sel.length}-dobavuvaci.pdf`, msg); };
+  document.getElementById('xlssel').onclick=()=>{ const sel=[...main.querySelectorAll('.seld:checked')].map(c=>c.dataset.d); const msg=document.getElementById('pdfallmsg');
+    if(!sel.length){ msg.textContent='Штиклирај барем еден добавувач.'; return; }
+    const list=items.filter(i=>sel.includes(i.dobavuvac||'')); const dd=o.datum.split('-').reverse().join('.');
+    makeXlsxOrder(`Нарачка ${dd}`, sel, list, `naracka-${o.datum}-${sel.length}-dobavuvaci.xlsx`, msg); };
   main.querySelectorAll('.pdfd').forEach(b=>b.onclick=()=>{ const d=b.dataset.d; const g=groups[d]; const msg=document.createElement('span'); b.after(msg);
-    makePdf(`Нарачка · ${d||'без добавувач'} · ${o.datum}`, g.map(i=>[i.sifra,i.ime,fmt1(i.kolicina)]), ['Шифра','Артикл','Количина'], `naracka-${(d||'bez').replace(/[^\w]+/g,'_')}-${o.datum}.pdf`, msg); });
+    makePdf(`Нарачка · ${d||'без добавувач'} · ${o.datum}`, g.map(i=>[i.sifra,i.ime,fmt1(i.kolicina),i.zabeleska||'']), ['Шифра','Артикл','Количина','Забелешка'], `naracka-${(d||'bez').replace(/[^\w]+/g,'_')}-${o.datum}.pdf`, msg); });
 }
 async function viewCheck(h){
   const m=h.match(/^oc(\d+)_(.*)$/); const oid=+m[1]; const dob=decodeURIComponent(m[2]);
   main.innerHTML='<div class="empty">Вчитувам…</div>';
   const [[o],items,alld]=await Promise.all([sql(`select * from orders where id=${oid}`),
-    sql(`select i.id,i.sifra,i.kolicina,i.status,i.dobavuvac,a.ime,st.zaliha from order_items i join articles a on a.sifra=i.sifra left join article_stats st on st.sifra=i.sifra where i.order_id=${oid} and coalesce(i.dobavuvac,'')='${sq(dob)}' order by a.ime`),
+    sql(`select i.id,i.sifra,i.kolicina,i.status,i.dobavuvac,i.zabeleska,a.ime,st.zaliha from order_items i join articles a on a.sifra=i.sifra left join article_stats st on st.sifra=i.sifra where i.order_id=${oid} and coalesce(i.dobavuvac,'')='${sq(dob)}' order by a.ime`),
     sql(`select d from (select dobavuvac_sw d from articles where dobavuvac_sw is not null union select ime from suppliers) x group by 1 order by 1`)]);
   let cur=Math.max(0, items.findIndex(i=>i.status==='ceka'));
   const noDob = dob==='';
@@ -675,7 +724,7 @@ async function viewCheck(h){
     <p class="sub">${items.length} артикли · <b>↓ ↑</b> движење · <b>Enter</b> = има (зелено) · <b>Space</b> = нема (црвено) · или кликни ✓ / ✗</p>
     ${noDob?'<datalist id="dobl2">'+alld.map(d=>`<option value="${esc(d.d)}">`).join('')+'</datalist>':''}
     <div class="card" id="chk">${items.map((i,k)=>`<div class="ci ${i.status}" data-id="${i.id}" data-k="${k}" tabindex="0">
-        <div style="flex:1;min-width:0"><b>${esc(i.ime)}</b> <span class="code">${i.sifra}</span><div class="hint">залиха ${fmt1(i.zaliha)}</div>${noDob?`<input class="ci-d" list="dobl2" placeholder="добавувач" value="" style="margin-top:4px;width:200px">`:''}</div>
+        <div style="flex:1;min-width:0"><b>${esc(i.ime)}</b> <span class="code">${i.sifra}</span><div class="hint">залиха ${fmt1(i.zaliha)}</div>${i.zabeleska?`<div class="ntx">💬 ${esc(i.zabeleska)}</div>`:''}${noDob?`<input class="ci-d" list="dobl2" placeholder="добавувач" value="" style="margin-top:4px;width:200px">`:''}</div>
         <div class="bigq">${fmt1(i.kolicina)}</div><div class="inline"><button class="ok" title="Има (Enter)">✓</button><button class="no" title="Нема (Space)">✗</button></div></div>`).join('')}</div>
     <div class="inline" style="margin-top:12px"><button class="btn" id="finish">Заврши — „нема“ одат во „Пробај на друго место“</button><a class="btn sec" href="#o${oid}">Назад</a><span id="cmsg" class="hint"></span></div>`;
   const els=[...main.querySelectorAll('.ci')];
