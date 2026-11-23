@@ -815,6 +815,7 @@ function rtHtml(){ return `<div class="card">
   <div class="inline" style="flex-wrap:wrap;gap:8px">
     <select id="rtmode"><option value="kw">Клучен збор / дел од име</option><option value="9">Бренд</option><option value="8">Збирен бренд</option><option value="1">Подгрупа</option><option value="list">Листа подготвена од Claude</option></select>
     <input id="rtval" list="rtopts" placeholder="пр. исла" style="min-width:260px"><datalist id="rtopts"></datalist>
+    <label class="hint"><input type="checkbox" id="rta" checked> само активни</label>
     <label class="hint"><input type="checkbox" id="rtz" checked> само со залиха</label>
     <button class="btn" id="rtgo">Прикажи</button><span id="rtmsg" class="hint"></span>
   </div>
@@ -842,15 +843,15 @@ async function rtSearch(){ const mode=document.getElementById('rtmode').value, v
   else if(mode==='list'){ const l=(RTLISTS||[]).find(x=>x.ime===v); if(!l){ msg.textContent='Избери листа од понудените.'; return; } cond=`a.sifra = any((select sifri from rok_lists where id=${+l.id}))`; }
   else { const t=(RTTAGS||[]).find(x=>x.group_id==mode&&x.ime===v); if(!t){ msg.textContent='Избери од понудените вредности.'; return; }
     cond=`a.sifra in (select at.sifra from article_tags at join tags t on t.id=at.tag_id where t.id=${+t.id} or t.parent_id=${+t.id})`; }
-  const z=document.getElementById('rtz').checked?'and coalesce(st.zaliha,0)>0':'';
+  const z=document.getElementById('rtz').checked?'and coalesce(st.zaliha,0)>0':''; const akt=document.getElementById('rta').checked?'a.aktiven and':'';
   msg.textContent='Барам…';
-  try{ const [rows,[d]]=await Promise.all([sql(`select a.sifra,a.ime,coalesce(st.zaliha,0) zaliha,(select string_agg(to_char(l.rok,'MM.YYYY')||' – '||l.kolicina::float,', ' order by l.rok) from lots l where l.sifra=a.sifra and l.status='aktivna') serii,(select m.razlika from lot_mismatch m where m.sifra=a.sifra and abs(m.razlika)>=1) mism,(select fali from popis_fali pf where pf.sifra=a.sifra) fali from articles a left join article_stats st on st.sifra=a.sifra where a.aktiven and ${cond} ${z} order by a.ime limit 3000`),sql(`select to_char(max(datum),'DD.MM.YYYY') d from stock_snapshots`)]);
+  try{ const [rows,[d]]=await Promise.all([sql(`select a.sifra,a.ime,a.aktiven,coalesce(st.zaliha,0) zaliha,(select string_agg(to_char(l.rok,'MM.YYYY')||' – '||l.kolicina::float,', ' order by l.rok) from lots l where l.sifra=a.sifra and l.status='aktivna') serii,(select m.razlika from lot_mismatch m where m.sifra=a.sifra and abs(m.razlika)>=1) mism,(select fali from popis_fali pf where pf.sifra=a.sifra) fali from articles a left join article_stats st on st.sifra=a.sifra where ${akt} ${cond} ${z} order by a.aktiven desc, a.ime limit 3000`),sql(`select to_char(max(datum),'DD.MM.YYYY') d from stock_snapshots`)]);
     RT.rows=rows; RT.title=title; RT.zdat=d.d; msg.textContent='';
     if(!rows.length){ res.innerHTML='<div class="empty">Нема артикли за ова барање.</div>'; return; }
     res.innerHTML=`<div class="inline" style="flex-wrap:wrap;gap:8px;margin-bottom:8px"><b id="rtcnt">${rows.length}</b> артикли · залиха од извештај ${d.d}
       <button class="btn" id="rtxls">⬇ Excel</button><button class="btn sec" id="rtpdf">⬇ PDF</button><span id="rtout" class="hint"></span></div>
       <div class="twrap" style="max-height:460px;overflow:auto"><table><tr><th style="width:28px"><input type="checkbox" id="rtall" checked></th><th>Шифра</th><th>Артикл</th><th class="n">Залиха</th><th>Внесени рокови</th></tr>
-      ${rows.map((r,i)=>`<tr><td><input type="checkbox" class="rtc" data-i="${i}" checked></td><td class="code">${r.sifra}</td><td><a class="art" href="#a${r.sifra}">${esc(r.ime)}</a></td><td class="n">${fmt1(r.zaliha)}</td><td class="hint">${+r.fali?`<span class="chip fali">🔍 фали ${fmt1(r.fali)}</span> `:''}${esc(r.serii||'')}${r.mism!=null&&!+r.fali?` <span class="mismc" title="Рокови и залиха не се совпаѓаат">⚠ ${+r.mism>0?'+':''}${fmt1(r.mism)}</span>`:''}</td></tr>`).join('')}</table></div>`;
+      ${rows.map((r,i)=>`<tr><td><input type="checkbox" class="rtc" data-i="${i}" checked></td><td class="code">${r.sifra}</td><td><a class="art" href="#a${r.sifra}">${esc(r.ime)}</a>${r.aktiven?'':' <span class="chip bad">неактивен</span>'}</td><td class="n">${fmt1(r.zaliha)}</td><td class="hint">${+r.fali?`<span class="chip fali">🔍 фали ${fmt1(r.fali)}</span> `:''}${esc(r.serii||'')}${r.mism!=null&&!+r.fali?` <span class="mismc" title="Рокови и залиха не се совпаѓаат">⚠ ${+r.mism>0?'+':''}${fmt1(r.mism)}</span>`:''}</td></tr>`).join('')}</table></div>`;
     const cnt=()=>document.getElementById('rtcnt').textContent=rtSel().length;
     document.getElementById('rtall').onchange=e=>{ res.querySelectorAll('.rtc').forEach(c=>c.checked=e.target.checked); cnt(); };
     res.querySelectorAll('.rtc').forEach(c=>c.onchange=cnt);
